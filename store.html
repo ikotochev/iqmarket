@@ -128,6 +128,7 @@
       IQ Market
     </a>
     <span class="spacer"></span>
+    <button class="hbtn" id="newsBtn" title="Известия и анкети">🔔</button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn primary cart-btn" id="cartBtn">🛒 Кошница
       <span class="badge" id="cartBadge" hidden>0</span>
@@ -645,6 +646,7 @@ async function orderDetail(id){
 // ---------- events ----------
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
 $('cartBtn').onclick=openCart;
+$('newsBtn').onclick=newsModal;
 $('lightbox').onclick=()=>$('lightbox').classList.remove('open');
 $('closeCart').onclick=closeCart;
 $('overlay').onclick=closeCart;
@@ -661,6 +663,41 @@ async function loadAnnounce(){
         <span>📣</span><div style="flex:1"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}</div>
         <button class="x" style="margin:0" onclick="document.getElementById('announce').innerHTML=''">×</button></div>`;}
   }catch(e){}
+}
+
+// ---------- известия + анкети ----------
+async function newsModal(){
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div><h2>Известия</h2><div id="newsBody"><div class="center">Зареждане…</div></div>`);
+  const [{data:anns},{data:polls}]=await Promise.all([
+    sb.from('announcements').select('title,body,created_at').eq('is_active',true).order('created_at',{ascending:false}),
+    sb.from('polls').select('id,question,options').eq('is_active',true).order('created_at',{ascending:false})
+  ]);
+  let html='';
+  if(anns&&anns.length){html+='<div style="font-weight:700;margin:6px 0 4px">📣 Обяви</div>'+anns.map(a=>`<div class="info"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}<div class="muted" style="font-size:.75rem;margin-top:4px">${fmtDate(a.created_at)}</div></div>`).join('');}
+  if(polls&&polls.length){html+='<div style="font-weight:700;margin:14px 0 4px">🗳️ Анкети</div><div id="pollsWrap"></div>';}
+  const b=$('newsBody'); if(!b)return;
+  b.innerHTML= html || '<div class="center">Няма нови известия</div>';
+  if(polls&&polls.length){for(const p of polls){await renderPoll(p);}}
+}
+async function renderPoll(p){
+  const wrap=$('pollsWrap'); if(!wrap)return;
+  let opts=p.options; if(typeof opts==='string'){try{opts=JSON.parse(opts);}catch(e){opts=[];}}
+  if(!Array.isArray(opts))opts=[];
+  let results={}, total=0, myVote=null;
+  try{const {data:r}=await sb.rpc('get_poll_results',{p_poll_id:p.id});(r||[]).forEach(x=>{results[x.option_index]=x.vote_count;total+=x.vote_count;});}catch(e){}
+  if(USER){try{const {data:mv}=await sb.rpc('get_my_vote',{p_poll_id:p.id});if(mv!==null&&mv!==undefined)myVote=mv;}catch(e){}}
+  const voted = myVote!==null;
+  const el=document.createElement('div'); el.className='info'; el.style.display='block';
+  el.innerHTML=`<div style="font-weight:600;margin-bottom:8px">${escapeHtml(p.question||'')}</div>`+
+    opts.map((o,i)=>{
+      const c=results[i]||0, pct=total?Math.round(c*100/total):0, mine=i===myVote;
+      if(voted||!USER){
+        return `<div style="margin:5px 0"><div style="display:flex;justify-content:space-between;font-size:.85rem"><span>${escapeHtml(String(o))} ${mine?'✓':''}</span><span class="muted">${pct}% (${c})</span></div><div style="height:7px;background:var(--line);border-radius:5px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${pct}%;background:var(--brand)"></div></div></div>`;
+      }
+      return `<button class="hbtn" style="display:block;width:100%;text-align:left;margin:5px 0" data-poll="${p.id}" data-opt="${i}">${escapeHtml(String(o))}</button>`;
+    }).join('') + (!USER?'<div class="muted" style="font-size:.8rem;margin-top:6px">Влез, за да гласуваш.</div>':'');
+  wrap.appendChild(el);
+  el.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{try{await sb.rpc('vote_poll',{p_poll_id:b.dataset.poll,p_option_index:+b.dataset.opt});toast('Благодарим за гласа!');newsModal();}catch(e){toast('Грешка при гласуване');}});
 }
 
 // ---------- init ----------
