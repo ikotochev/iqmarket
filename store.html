@@ -1,6 +1,7 @@
 <title>Магазин — IQ Market</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.stripe.com/v3/"></script>
 <style>
   :root{
     --bg:#F5F7F1;--surface:#FFFFFF;--surface-2:#EEF3EA;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
@@ -113,6 +114,9 @@
   .lightbox{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;padding:20px;cursor:zoom-out}
   .lightbox.open{display:flex}
   .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+  .paysel{display:flex;gap:8px;margin-top:6px}
+  .payopt{flex:1;padding:11px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:10px;font-weight:700;font-size:.9rem}
+  .payopt.active{border-color:var(--brand);color:var(--brand);background:var(--surface-2)}
   .ordrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;text-align:left;color:var(--ink)}
   .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
 </style>
@@ -169,6 +173,10 @@
 const SUPABASE_URL='https://opmnvrwnsqblyrtlogcj.supabase.co';
 const SUPABASE_KEY='sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Stripe (ТЕСТОВ ключ; смени с pk_live_... след регистрация на фирмата)
+const STRIPE_PK='pk_test_51U7vP9FjuiJdfYLkYQkL6mIHb5PVwLGMZEmEeIq21j77iqRz5h1eaqTcP6mvQ4CAvS1JKSvOJDN6pruBUd7q45yo00wACLkUyD';
+const stripe = (typeof Stripe!=='undefined')? Stripe(STRIPE_PK): null;
+let PM='cash';
 
 const CAT_EMOJI={'Всички':'🛒','Консерви':'🥫','Хранителни':'🍝','За дома':'🧽','Захарни':'🍬','Напитки':'🥤','Млечни':'🥛','Олио и подправки':'🫒','Месо':'🥩','Хляб и сладкиши':'🍫','Замразени':'❄️','Козметика':'🧴','Плодове и зеленчуци':'🥦','Суха храна':'🌾','Зеленчуци':'🥕','Плодове':'🍎'};
 const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override';
@@ -480,6 +488,7 @@ function accountModal(){
 async function checkout(){
   if(!cartArr().length)return;
   if(!USER||!PROFILE){authModal('login');return;}
+  PM='cash';
   const sub=subtotal();
   const minOrder=ZONE.min_order||0, fee=calcFee(sub);
   const belowMin = minOrder>0 && sub<minOrder;
@@ -493,7 +502,11 @@ async function checkout(){
     <textarea id="coAddr" rows="2">${escapeHtml(PROFILE.address||'')}</textarea>
     <label>Желан час за доставка</label>
     <select id="coTime">${slots}</select>
-    <div class="info">Плащане: <strong>в брой при доставка</strong> (с карта — в мобилното приложение).</div>
+    <label>Начин на плащане</label>
+    <div class="paysel">
+      <button type="button" class="payopt ${PM==='cash'?'active':''}" data-pm="cash">💵 В брой</button>
+      <button type="button" class="payopt ${PM==='card'?'active':''}" data-pm="card">💳 Карта онлайн</button>
+    </div>
     ${belowMin?`<div class="err">Минимална поръчка за ${escapeHtml(PROFILE.zone||'')}: ${money(minOrder)} · сега имаш ${money(sub)}</div>`:''}
     ${weighted?`<div class="info">⚖️ Част от продуктите са на килограм — крайната цена се определя след претегляне и ще получиш известие с точната сума.</div>`:''}
     <div class="rowb" style="margin-top:12px"><span class="muted">Продукти</span><span>${money(sub)}</span></div>
@@ -503,27 +516,37 @@ async function checkout(){
     <button class="big" id="coGo" ${belowMin?'disabled':''}>Поръчай сега</button>
   `);
   $('coGo').onclick=placeOrder;
+  $('sheet').querySelectorAll('.payopt').forEach(b=>b.onclick=()=>{
+    PM=b.dataset.pm;
+    $('sheet').querySelectorAll('.payopt').forEach(x=>x.classList.toggle('active',x===b));
+    $('coGo').textContent = PM==='card'?'Плати с карта':'Поръчай сега';
+  });
 }
 async function placeOrder(){
   const err=$('coErr'); err.textContent='';
   const addr=$('coAddr').value.trim();
   if(!addr){err.textContent='Въведи адрес';return;}
-  $('coGo').disabled=true; $('coGo').textContent='Изпращане…';
+  if(PM==='card' && !stripe){err.textContent='Плащането с карта не е достъпно в момента.';return;}
+  const lbl = PM==='card'?'Плати с карта':'Поръчай сега';
+  $('coGo').disabled=true; $('coGo').textContent='Момент…';
   try{
     const items=cartArr().map(i=>({product_id:i.product.id, qty:i.qty}));
     const dt=$('coTime')?.value||null;
-    const {data:orderId,error}=await sb.rpc('create_order',{p_address:addr,p_payment_method:'cash',p_delivery_time:dt,p_items:items});
+    const {data:orderId,error}=await sb.rpc('create_order',{p_address:addr,p_payment_method:PM,p_delivery_time:dt,p_items:items});
     if(error){
       let m=error.message||'Грешка';
       if(m.includes('под минимума')) m='Поръчката е под минимума за твоята зона.';
-      err.textContent=m; $('coGo').disabled=false; $('coGo').textContent='Поръчай сега'; return;
+      err.textContent=m; $('coGo').disabled=false; $('coGo').textContent=lbl; return;
     }
-    // успех
-    CART={}; saveCart(); renderGrid();
-    let total=null;
-    try{const {data:o}=await sb.from('orders').select('total').eq('id',orderId).maybeSingle();if(o)total=o.total;}catch(e){}
-    closeCart();
-    openModal(`<div class="ok-box">
+    if(PM==='card'){ await payWithCard(orderId); return; }
+    orderSuccess(orderId);
+  }catch(e){err.textContent='Грешка: '+e.message;$('coGo').disabled=false;$('coGo').textContent=lbl;}
+}
+async function orderSuccess(orderId){
+  CART={}; saveCart(); renderGrid(); closeCart();
+  let total=null;
+  try{const {data:o}=await sb.from('orders').select('total').eq('id',orderId).maybeSingle();if(o)total=o.total;}catch(e){}
+  openModal(`<div class="ok-box">
       <div class="big-check">✅</div>
       <h2>Поръчката е приета!</h2>
       <p class="muted">Номер: #${String(orderId).slice(0,8)}</p>
@@ -532,8 +555,39 @@ async function placeOrder(){
       <button class="big" id="okOrders">Проследи поръчката</button>
       <button class="big" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)" onclick="document.getElementById('modal').classList.remove('open')">Разбрах</button>
     </div>`);
-    $('okOrders').onclick=ordersModal;
-  }catch(e){err.textContent='Грешка: '+e.message;$('coGo').disabled=false;$('coGo').textContent='Поръчай сега';}
+  $('okOrders').onclick=ordersModal;
+}
+async function payWithCard(orderId){
+  const err=$('coErr'); if(err)err.textContent='';
+  let clientSecret;
+  try{
+    const {data,error}=await sb.functions.invoke('stripe-create-intent',{body:{order_id:orderId}});
+    if(error||!data||!data.client_secret) throw new Error((data&&data.error)||'Неуспешно създаване на плащане');
+    clientSecret=data.client_secret;
+  }catch(e){
+    await sb.rpc('cancel_my_unpaid_order',{p_order_id:orderId}).catch(()=>{});
+    if($('coErr')){$('coErr').textContent='Грешка при плащане: '+e.message;$('coGo').disabled=false;$('coGo').textContent='Плати с карта';}
+    return;
+  }
+  const dark = window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches;
+  const elements=stripe.elements({clientSecret, appearance:{theme: dark?'night':'stripe'}});
+  const pe=elements.create('payment');
+  openModal(`
+    <h2>Плащане с карта</h2>
+    <p class="muted" style="font-size:.85rem;margin:4px 0 0">Сумата се резервира сега и се таксува при приготвяне на поръчката.</p>
+    <div id="payEl" style="margin:16px 0"></div>
+    <div class="err" id="payErr"></div>
+    <button class="big" id="payGo">Плати</button>
+    <button class="big" id="payCancel" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Отказ</button>
+  `);
+  pe.mount('#payEl');
+  $('payCancel').onclick=async()=>{await sb.rpc('cancel_my_unpaid_order',{p_order_id:orderId}).catch(()=>{});closeModal();toast('Плащането е отказано');};
+  $('payGo').onclick=async()=>{
+    $('payGo').disabled=true; $('payGo').textContent='Обработка…'; $('payErr').textContent='';
+    const {error}=await stripe.confirmPayment({elements, redirect:'if_required'});
+    if(error){$('payErr').textContent=error.message||'Плащането не бе прието';$('payGo').disabled=false;$('payGo').textContent='Плати';return;}
+    orderSuccess(orderId);
+  };
 }
 
 // ---------- моите поръчки + проследяване ----------
