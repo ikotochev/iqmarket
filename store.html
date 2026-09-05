@@ -25,6 +25,7 @@
     border-radius:10px;padding:8px 12px;font-size:.9rem;font-weight:600}
   .hbtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
   .cart-btn{position:relative}
+  .deliverbar{padding:7px 14px;font-size:.86rem;background:var(--surface-2);border-top:1px solid var(--line);color:var(--ink-soft);text-align:center}
   .badge{position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border-radius:20px;font-size:.7rem;
     min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px;font-weight:700}
   /* layout */
@@ -108,6 +109,10 @@
     padding:12px 18px;border-radius:12px;z-index:80;font-weight:600;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
   .toast.show{opacity:.96}
   .info{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.85rem;color:var(--ink-soft);margin:10px 0}
+  .det-img{cursor:zoom-in}
+  .lightbox{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;padding:20px;cursor:zoom-out}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
   .ordrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;text-align:left;color:var(--ink)}
   .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
 </style>
@@ -119,12 +124,12 @@
       IQ Market
     </a>
     <span class="spacer"></span>
-    <button class="hbtn" id="ordersBtn" hidden>📦 Поръчки</button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn primary cart-btn" id="cartBtn">🛒 Кошница
       <span class="badge" id="cartBadge" hidden>0</span>
     </button>
   </div>
+  <div id="deliverbar" class="deliverbar" hidden></div>
 </header>
 
 <main>
@@ -157,6 +162,7 @@
 
 <!-- Модал (вход/регистрация/поръчка/успех) -->
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="lightbox" id="lightbox"><img id="lbImg" alt=""></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -259,7 +265,7 @@ function openDetail(id){
   openModal(`
     <button class="x" style="float:right;margin:-6px -6px 0 0" id="detX">×</button>
     <div style="clear:both"></div>
-    <div class="det-img">${p.image_url?`<img src="${p.image_url}" alt="">`:'🛒'}</div>
+    <div class="det-img" id="detImg" style="cursor:${p.image_url?'zoom-in':'default'}">${p.image_url?`<img src="${p.image_url}" alt="">`:'🛒'}</div>
     ${p.brand?`<div class="brand-s" style="margin-top:12px">${escapeHtml(p.brand)}</div>`:''}
     <h2 style="margin:3px 0 6px">${escapeHtml(p.name||'')}</h2>
     ${priced
@@ -272,9 +278,11 @@ function openDetail(id){
     <div id="detCtl" style="margin-top:18px"></div>
   `);
   $('detX').onclick=closeModal;
+  if(p.image_url){const di=$('detImg');if(di)di.onclick=()=>openLightbox(p.image_url);}
   renderDetailControl(p);
   loadRating(p);
 }
+function openLightbox(url){$('lbImg').src=url;$('lightbox').classList.add('open');}
 async function loadRating(p){
   const el=$('detRating'); if(!el)return;
   let avg=Number(p.rating_override)||0, votes=Number(p.votes_override)||0, mine=0;
@@ -310,7 +318,19 @@ async function toggleFav(id){
 }
 function cartArr(){return Object.values(CART);}
 function subtotal(){return cartArr().reduce((s,i)=>s+discounted(i.product)*i.qty,0);}
-function renderCartBadge(){const n=cartArr().length;const b=$('cartBadge');b.textContent=n;b.hidden=n===0;}
+function renderCartBadge(){const n=cartArr().length;const b=$('cartBadge');b.textContent=n;b.hidden=n===0;renderDeliverBar();}
+function renderDeliverBar(){
+  const bar=$('deliverbar'); if(!bar)return;
+  const sub=subtotal();
+  if(sub<=0){bar.hidden=true;return;}
+  let txt=`Кошница: <strong>${money(sub)}</strong>`;
+  if(PROFILE && ZONE.delivery_fee>0){
+    const fee=calcFee(sub), fo=ZONE.free_over||0, toFree=(fee>0&&fo>0)?(fo-sub):0;
+    txt += fee<=0 ? ' · <strong style="color:var(--brand)">Безплатна доставка 🎉</strong>' : ` · Доставка: <strong>${money(fee)}</strong>`;
+    if(toFree>0) txt += ` · <span style="color:var(--brand)">още ${money(toFree)} до безплатна доставка 🚚</span>`;
+  }
+  bar.innerHTML=txt; bar.hidden=false;
+}
 function renderCart(){
   const items=cartArr();
   $('cartItems').innerHTML= items.length? items.map(i=>{
@@ -354,9 +374,8 @@ async function refreshUser(){
     try{const {data:q}=await sb.from('quick_order_items').select('product_id').eq('client_id',USER.id);FAVS=new Set((q||[]).map(r=>r.product_id));}catch(e){}
   } else { ZONE={min_order:0,delivery_fee:0,free_over:0}; FAVS=new Set(); }
   $('accountBtn').textContent= PROFILE? (PROFILE.name?.split(' ')[0]||'Профил') : 'Вход';
-  $('ordersBtn').hidden = !PROFILE;
   if(USER) watchOrders();
-  renderCats(); renderGrid();
+  renderCats(); renderGrid(); renderDeliverBar();
 }
 function openModal(html){$('sheet').innerHTML=html;$('modal').classList.add('open');}
 function closeModal(){$('modal').classList.remove('open');}
@@ -572,7 +591,7 @@ async function orderDetail(id){
 // ---------- events ----------
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
 $('cartBtn').onclick=openCart;
-$('ordersBtn').onclick=ordersModal;
+$('lightbox').onclick=()=>$('lightbox').classList.remove('open');
 $('closeCart').onclick=closeCart;
 $('overlay').onclick=closeCart;
 $('checkoutBtn').onclick=checkout;
