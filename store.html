@@ -55,7 +55,9 @@
   .det-img{width:100%;aspect-ratio:16/10;background:var(--surface-2);border-radius:12px;display:grid;place-items:center;overflow:hidden;font-size:3rem}
   .det-img img{width:100%;height:100%;object-fit:contain}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-  .card .img{aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+  .card .img{position:relative;aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+  .fav{position:absolute;top:6px;right:6px;border:none;background:rgba(255,255,255,.92);color:#C0392B;width:30px;height:30px;border-radius:50%;font-size:1.05rem;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.25);line-height:1}
+  .fav.on{background:#C0392B;color:#fff}
   .card .img img{width:100%;height:100%;object-fit:cover}
   .card .img .ph{font-size:2.4rem;opacity:.5}
   .card .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
@@ -126,6 +128,7 @@
 </header>
 
 <main>
+  <div id="announce"></div>
   <input class="search" id="search" placeholder="Търсене на продукт...">
   <div class="layout">
     <aside class="side">
@@ -162,11 +165,12 @@ const SUPABASE_KEY='sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CAT_EMOJI={'Всички':'🛒','Консерви':'🥫','Хранителни':'🍝','За дома':'🧽','Захарни':'🍬','Напитки':'🥤','Млечни':'🥛','Олио и подправки':'🫒','Месо':'🥩','Хляб и сладкиши':'🍫','Замразени':'❄️','Козметика':'🧴','Плодове и зеленчуци':'🥦','Суха храна':'🌾','Зеленчуци':'🥕','Плодове':'🍎'};
-const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted';
+const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override';
 
+const FAV_CAT='★ Моят магазин';
 let PRODUCTS=[], CATS=['Всички'], HIDDEN=[], CAT='Всички', SEARCH='';
 let CART=loadCart();       // {product_id: {product, qty}}
-let USER=null, PROFILE=null;
+let USER=null, PROFILE=null, ZONE={min_order:0,delivery_fee:0,free_over:0}, FAVS=new Set();
 
 // ---------- utils ----------
 const $=id=>document.getElementById(id);
@@ -176,6 +180,8 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function discounted(p){return p.discount_percent>0? p.price*(1-p.discount_percent/100): p.price;}
 function step(p){return p.is_weighted?0.5:1;}
 function unitLabel(p){return p.is_weighted?'кг':(p.unit||'бр.');}
+function calcFee(sub){const sf=ZONE.delivery_fee||0,mn=ZONE.min_order||0,fo=ZONE.free_over||0;if(sf<=0)return 0;if(fo<=mn)return sf;let f=sf*(fo-sub)/(fo-mn);if(f<0)f=0;if(f>sf)f=sf;return Math.round(f*100)/100;}
+function stars(r){r=Number(r)||0;let h='';for(let i=1;i<=5;i++)h+=`<span style="color:${i<=Math.round(r)?'#F5A623':'var(--ink-faint)'}">★</span>`;return h;}
 function loadCart(){try{return JSON.parse(localStorage.getItem('iqm_cart')||'{}');}catch(e){return {};}}
 function saveCart(){localStorage.setItem('iqm_cart', JSON.stringify(CART));renderCartBadge();}
 
@@ -199,16 +205,20 @@ async function loadCatalog(){
 }
 function renderCats(){
   const counts={}; PRODUCTS.forEach(p=>counts[p.category]=(counts[p.category]||0)+1);
-  $('cats').innerHTML=CATS.map(c=>{
-    const n=c==='Всички'?PRODUCTS.length:(counts[c]||0);
-    return `<button class="catlink ${c===CAT?'active':''}" data-c="${c}">${CAT_EMOJI[c]||'🏷️'} <span>${c}</span><span class="cnt">${n}</span></button>`;
+  const list = PROFILE? [FAV_CAT,...CATS] : CATS;
+  $('cats').innerHTML=list.map(c=>{
+    const n= c===FAV_CAT? FAVS.size : (c==='Всички'?PRODUCTS.length:(counts[c]||0));
+    const emo= c===FAV_CAT? '★' : (CAT_EMOJI[c]||'🏷️');
+    return `<button class="catlink ${c===CAT?'active':''}" data-c="${c}">${emo} <span>${c}</span><span class="cnt">${n}</span></button>`;
   }).join('');
   $('cats').querySelectorAll('.catlink').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;SEARCH='';$('search').value='';renderCats();renderGrid();window.scrollTo({top:0,behavior:'smooth'});});
 }
 function renderGrid(){
   let list=PRODUCTS;
-  if(CAT!=='Всички') list=list.filter(p=>p.category===CAT);
+  if(CAT===FAV_CAT) list=list.filter(p=>FAVS.has(p.id));
+  else if(CAT!=='Всички') list=list.filter(p=>p.category===CAT);
   if(SEARCH.trim()){const q=SEARCH.trim().toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q));}
+  if(CAT===FAV_CAT && !list.length){$('grid').innerHTML='<div class="center">Твоят магазин е празен.<br>Натисни ♡ на продукт, за да го добавиш тук за бърза поръчка.</div>';return;}
   if(!list.length){$('grid').innerHTML='<div class="center">Няма намерени продукти</div>';return;}
   $('grid').innerHTML=list.map(p=>{
     const inCart=CART[p.id];
@@ -222,11 +232,14 @@ function renderGrid(){
       : inCart
       ? `<div class="stepper"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(inCart.qty)} ${unitLabel(p)}</span><button data-inc="${p.id}">＋</button></div>`
       : `<button class="add" data-add="${p.id}">Добави</button>`;
+    const heart=PROFILE?`<button class="fav ${FAVS.has(p.id)?'on':''}" data-fav="${p.id}" title="Моят магазин">${FAVS.has(p.id)?'♥':'♡'}</button>`:'';
+    const rating=(p.rating_override||p.votes_override)?`<div style="font-size:.8rem;line-height:1">${stars(p.rating_override)} <span class="muted">(${p.votes_override||0})</span></div>`:'';
     return `<div class="card">
-      <div class="img" data-detail="${p.id}">${img}</div>
+      <div class="img" data-detail="${p.id}">${img}${heart}</div>
       <div class="body">
         ${p.brand?`<div class="brand-s">${p.brand}</div>`:''}
         <div class="name" data-detail="${p.id}">${p.name||''}</div>
+        ${rating}
         ${priceHtml}
         <div class="addrow">${control}</div>
       </div></div>`;
@@ -235,6 +248,7 @@ function renderGrid(){
   $('grid').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
   $('grid').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
   $('grid').querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
+  $('grid').querySelectorAll('[data-fav]').forEach(b=>b.onclick=(e)=>{e.stopPropagation();toggleFav(b.dataset.fav);});
 }
 
 // ---------- детайл на продукт ----------
@@ -254,10 +268,22 @@ function openDetail(id){
     ${p.description
       ? `<p style="color:var(--ink-soft);font-size:.92rem;line-height:1.6;margin-top:14px;white-space:pre-wrap">${escapeHtml(p.description)}</p>`
       : `<p class="muted" style="margin-top:14px">Няма описание за този продукт.</p>`}
+    <div id="detRating"></div>
     <div id="detCtl" style="margin-top:18px"></div>
   `);
   $('detX').onclick=closeModal;
   renderDetailControl(p);
+  loadRating(p);
+}
+async function loadRating(p){
+  const el=$('detRating'); if(!el)return;
+  let avg=Number(p.rating_override)||0, votes=Number(p.votes_override)||0, mine=0;
+  try{const {data}=await sb.rpc('get_product_rating_stats',{p_product_id:p.id});if(data&&data[0]&&data[0].vote_count>0){avg=Number(data[0].avg_rating)||avg;votes=Number(data[0].vote_count)||votes;}}catch(e){}
+  if(USER){try{const {data:mr}=await sb.from('product_ratings').select('rating').eq('product_id',p.id).eq('user_id',USER.id).maybeSingle();if(mr)mine=mr.rating;}catch(e){}}
+  el.innerHTML=`
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px"><span style="font-size:1.15rem">${stars(avg)}</span><span class="muted" style="font-size:.85rem">${avg?avg.toFixed(1):'—'} (${votes})</span></div>
+    ${USER?`<div class="muted" style="margin-top:10px;font-size:.85rem">Твоята оценка:</div><div id="myStars" style="font-size:1.6rem;cursor:pointer;user-select:none">${[1,2,3,4,5].map(i=>`<span data-r="${i}" style="color:${i<=mine?'#F5A623':'var(--ink-faint)'}">★</span>`).join('')}</div>`:''}`;
+  if(USER)el.querySelectorAll('[data-r]').forEach(s=>s.onclick=async()=>{const r=+s.dataset.r;try{await sb.rpc('rate_product',{p_product_id:p.id,p_rating:r});toast('Благодарим за оценката!');loadRating(p);}catch(e){toast('Грешка');}});
 }
 function renderDetailControl(p){
   const el=$('detCtl'); if(!el)return;
@@ -276,6 +302,12 @@ function renderDetailControl(p){
 // ---------- кошница ----------
 function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p||discounted(p)<=0)return;CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
 function changeQty(id,dir){const it=CART[id];if(!it)return;const s=step(it.product);it.qty=Math.round((it.qty+dir*s)*1000)/1000;if(it.qty<=0)delete CART[id];saveCart();renderGrid();renderCart();}
+async function toggleFav(id){
+  if(!USER){authModal('login');return;}
+  if(FAVS.has(id)){FAVS.delete(id);sb.from('quick_order_items').delete().eq('client_id',USER.id).eq('product_id',id);}
+  else{FAVS.add(id);sb.from('quick_order_items').upsert({client_id:USER.id,product_id:id,qty:1},{onConflict:'client_id,product_id'});toast('Добавено в „Моят магазин"');}
+  renderGrid();renderCats();
+}
 function cartArr(){return Object.values(CART);}
 function subtotal(){return cartArr().reduce((s,i)=>s+discounted(i.product)*i.qty,0);}
 function renderCartBadge(){const n=cartArr().length;const b=$('cartBadge');b.textContent=n;b.hidden=n===0;}
@@ -293,11 +325,20 @@ function renderCart(){
   }).join('') : '<div class="center">Кошницата е празна</div>';
   $('cartItems').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
   $('cartItems').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
-  $('subtotal').textContent=money(subtotal());
+  const sub=subtotal();
+  $('subtotal').textContent=money(sub);
+  const fee=calcFee(sub);
+  $('feeRow').hidden = !(PROFILE && ZONE.delivery_fee>0);
+  $('fee').innerHTML = fee<=0? '<span style="color:var(--brand);font-weight:700">Безплатна</span>' : money(fee);
+  const mn=ZONE.min_order||0, fo=ZONE.free_over||0, toFree=(fee>0&&fo>0)?(fo-sub):0;
+  const belowMin = PROFILE && mn>0 && sub<mn;
+  let mrow='';
+  if(belowMin) mrow=`<span class="err" style="margin:0">Минимум за ${escapeHtml(PROFILE.zone||'')}: ${money(mn)}</span>`;
+  else if(toFree>0) mrow=`<span style="color:var(--brand);font-size:.85rem">Още ${money(toFree)} до безплатна доставка 🚚</span>`;
+  $('minRow').innerHTML=mrow; $('minRow').hidden=!mrow;
   const weighted=items.some(i=>i.product.is_weighted);
-  $('minRow').hidden=true;
-  $('checkoutBtn').disabled=items.length===0;
-  $('checkoutBtn').textContent= weighted? 'Поръчай (цена след претегляне)':'Поръчай';
+  $('checkoutBtn').disabled = items.length===0 || belowMin;
+  $('checkoutBtn').textContent= belowMin? `Минимум ${money(mn)}` : (weighted? 'Поръчай (цена след претегляне)':'Поръчай');
 }
 function openCart(){renderCart();$('overlay').classList.add('open');$('drawer').classList.add('open');}
 function closeCart(){$('overlay').classList.remove('open');$('drawer').classList.remove('open');}
@@ -308,9 +349,14 @@ async function refreshUser(){
   const {data}=await sb.auth.getUser(); USER=data?.user||null;
   if(USER){const {data:pr}=await sb.from('profiles').select('*').eq('id',USER.id).maybeSingle();PROFILE=pr;}
   else PROFILE=null;
+  if(PROFILE){
+    if(PROFILE.zone){try{const {data:z}=await sb.from('delivery_zones').select('min_order,delivery_fee,free_over').eq('name',PROFILE.zone).maybeSingle();if(z)ZONE={min_order:+z.min_order||0,delivery_fee:+z.delivery_fee||0,free_over:+z.free_over||0};}catch(e){}}
+    try{const {data:q}=await sb.from('quick_order_items').select('product_id').eq('client_id',USER.id);FAVS=new Set((q||[]).map(r=>r.product_id));}catch(e){}
+  } else { ZONE={min_order:0,delivery_fee:0,free_over:0}; FAVS=new Set(); }
   $('accountBtn').textContent= PROFILE? (PROFILE.name?.split(' ')[0]||'Профил') : 'Вход';
   $('ordersBtn').hidden = !PROFILE;
   if(USER) watchOrders();
+  renderCats(); renderGrid();
 }
 function openModal(html){$('sheet').innerHTML=html;$('modal').classList.add('open');}
 function closeModal(){$('modal').classList.remove('open');}
@@ -386,30 +432,56 @@ async function doReg(){
   }catch(e){err.textContent='Грешка: '+e.message;$('doReg').disabled=false;}
 }
 async function logout(){await sb.auth.signOut();await refreshUser();toast('Излязохте');}
+function accountModal(){
+  if(!PROFILE){authModal('login');return;}
+  const credits=PROFILE.free_delivery_credits||0;
+  openModal(`
+    <button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div>
+    <h2>${escapeHtml(PROFILE.name||'Профил')}</h2>
+    <p class="muted" style="margin:2px 0">${escapeHtml(PROFILE.phone||'')} · ${escapeHtml(PROFILE.zone||'')}</p>
+    <label>Име</label><input id="acName" value="${escapeHtml(PROFILE.name||'')}">
+    <label>Адрес за доставка</label><textarea id="acAddr" rows="2">${escapeHtml(PROFILE.address||'')}</textarea>
+    <button class="big" id="acSave" style="margin-top:8px">Запази промените</button>
+    <div class="info" style="margin-top:16px">🎁 <strong>Покани приятел</strong><br>
+      Твоят код: <strong style="font-size:1.1rem;letter-spacing:1px">${escapeHtml(PROFILE.referral_code||'')}</strong>
+      <button class="hbtn" id="acCopy" style="margin-left:8px;padding:4px 10px">Копирай</button><br>
+      Когато приятел поръча за пръв път с кода ти, получаваш <strong>безплатна доставка</strong>.
+      ${credits>0?`<br>Имаш <strong>${credits}</strong> безплатни доставки 🎉`:''}
+    </div>
+    <button class="big" id="acOrders" style="background:var(--surface);color:var(--ink);border:1px solid var(--line)">📦 Моите поръчки</button>
+    <button class="big" id="acLogout" style="background:transparent;color:var(--danger);border:1px solid var(--danger)">Изход</button>
+  `);
+  $('acSave').onclick=async()=>{const n=$('acName').value.trim(),a=$('acAddr').value.trim();try{await sb.from('profiles').update({name:n,address:a}).eq('id',USER.id);PROFILE.name=n;PROFILE.address=a;$('accountBtn').textContent=(n.split(' ')[0]||'Профил');toast('Запазено ✓');}catch(e){toast('Грешка при запис');}};
+  $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
+  $('acOrders').onclick=ordersModal;
+  $('acLogout').onclick=()=>{logout();closeModal();};
+}
 
 // ---------- поръчка ----------
 async function checkout(){
   if(!cartArr().length)return;
   if(!USER||!PROFILE){authModal('login');return;}
-  // зонов минимум за информация
-  let minOrder=0;
-  try{
-    const {data:z}=await sb.from('delivery_zones').select('min_order,delivery_fee,free_over').eq('name',PROFILE.zone).maybeSingle();
-    if(z)minOrder=Number(z.min_order)||0;
-  }catch(e){}
   const sub=subtotal();
+  const minOrder=ZONE.min_order||0, fee=calcFee(sub);
+  const belowMin = minOrder>0 && sub<minOrder;
   const weighted=cartArr().some(i=>i.product.is_weighted);
+  const finalTot = sub + fee;
+  let slots='<option value="">При първа възможност</option>';
+  for(let h=9;h<=19;h++){slots+=`<option value="${String(h).padStart(2,'0')}:00">${String(h).padStart(2,'0')}:00 – ${String(h+1).padStart(2,'0')}:00</option>`;}
   openModal(`
     <h2>Потвърди поръчката</h2>
     <label>Адрес за доставка</label>
-    <textarea id="coAddr" rows="2">${(PROFILE.address||'').replace(/</g,'&lt;')}</textarea>
-    <div class="info">Плащане: <strong>в брой при доставка</strong> (плащане с карта е налично в мобилното приложение).</div>
-    ${minOrder&&sub<minOrder?`<div class="err">Минимална поръчка за ${PROFILE.zone}: ${money(minOrder)} · сега имаш ${money(sub)}</div>`:''}
-    ${weighted?`<div class="info">⚖️ Част от продуктите са на килограм — крайната цена се определя след претегляне и ще получиш известие.</div>`:''}
-    <div class="rowb" style="margin-top:12px"><span class="muted">Продукти</span><strong>${money(sub)}</strong></div>
-    <div class="info">Таксата за доставка се добавя според зоната ти (безплатна над определена сума).</div>
+    <textarea id="coAddr" rows="2">${escapeHtml(PROFILE.address||'')}</textarea>
+    <label>Желан час за доставка</label>
+    <select id="coTime">${slots}</select>
+    <div class="info">Плащане: <strong>в брой при доставка</strong> (с карта — в мобилното приложение).</div>
+    ${belowMin?`<div class="err">Минимална поръчка за ${escapeHtml(PROFILE.zone||'')}: ${money(minOrder)} · сега имаш ${money(sub)}</div>`:''}
+    ${weighted?`<div class="info">⚖️ Част от продуктите са на килограм — крайната цена се определя след претегляне и ще получиш известие с точната сума.</div>`:''}
+    <div class="rowb" style="margin-top:12px"><span class="muted">Продукти</span><span>${money(sub)}</span></div>
+    <div class="rowb"><span class="muted">Доставка</span><span>${fee<=0?'<span style="color:var(--brand);font-weight:700">Безплатна</span>':money(fee)}</span></div>
+    <div class="rowb" style="font-weight:800;font-size:1.05rem"><span>${weighted?'Общо (прогнозно)':'Общо'}</span><span>${money(finalTot)}</span></div>
     <div class="err" id="coErr"></div>
-    <button class="big" id="coGo" ${minOrder&&sub<minOrder?'disabled':''}>Поръчай сега</button>
+    <button class="big" id="coGo" ${belowMin?'disabled':''}>Поръчай сега</button>
   `);
   $('coGo').onclick=placeOrder;
 }
@@ -420,7 +492,8 @@ async function placeOrder(){
   $('coGo').disabled=true; $('coGo').textContent='Изпращане…';
   try{
     const items=cartArr().map(i=>({product_id:i.product.id, qty:i.qty}));
-    const {data:orderId,error}=await sb.rpc('create_order',{p_address:addr,p_payment_method:'cash',p_delivery_time:null,p_items:items});
+    const dt=$('coTime')?.value||null;
+    const {data:orderId,error}=await sb.rpc('create_order',{p_address:addr,p_payment_method:'cash',p_delivery_time:dt,p_items:items});
     if(error){
       let m=error.message||'Грешка';
       if(m.includes('под минимума')) m='Поръчката е под минимума за твоята зона.';
@@ -504,10 +577,22 @@ $('closeCart').onclick=closeCart;
 $('overlay').onclick=closeCart;
 $('checkoutBtn').onclick=checkout;
 $('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};
-$('accountBtn').onclick=()=>{ if(PROFILE){ openModal(`<h2>${PROFILE.name||'Профил'}</h2><p class="muted">${PROFILE.phone||''} · ${PROFILE.zone||''}</p><div class="info">${(PROFILE.address||'')}</div><button class="big" id="lo">Изход</button>`); $('lo').onclick=()=>{logout();closeModal();}; } else authModal('login'); };
+$('accountBtn').onclick=accountModal;
+
+// ---------- обяви ----------
+async function loadAnnounce(){
+  try{
+    const {data}=await sb.from('announcements').select('title,body,created_at').eq('is_active',true).order('created_at',{ascending:false}).limit(1);
+    if(data&&data[0]){const a=data[0];
+      $('announce').innerHTML=`<div class="info" style="border-color:var(--brand);display:flex;gap:10px;align-items:flex-start">
+        <span>📣</span><div style="flex:1"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}</div>
+        <button class="x" style="margin:0" onclick="document.getElementById('announce').innerHTML=''">×</button></div>`;}
+  }catch(e){}
+}
 
 // ---------- init ----------
 renderCartBadge();
 refreshUser();
 loadCatalog();
+loadAnnounce();
 </script>
