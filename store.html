@@ -659,7 +659,7 @@ async function loadAnnounce(){
   try{
     const {data}=await sb.from('announcements').select('title,body,created_at').eq('is_active',true).order('created_at',{ascending:false}).limit(1);
     if(data&&data[0]){const a=data[0];
-      $('announce').innerHTML=`<div class="info" style="border-color:var(--brand);display:flex;gap:10px;align-items:flex-start">
+      $('announce').innerHTML=`<div class="info" style="border-color:var(--brand);color:var(--ink);display:flex;gap:10px;align-items:flex-start">
         <span>📣</span><div style="flex:1"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}</div>
         <button class="x" style="margin:0" onclick="document.getElementById('announce').innerHTML=''">×</button></div>`;}
   }catch(e){}
@@ -688,7 +688,7 @@ async function newsModal(){
     sb.from('polls').select('id,question,options').eq('is_active',true).order('created_at',{ascending:false})
   ]);
   let html='';
-  if(anns&&anns.length){html+='<div style="font-weight:700;margin:6px 0 4px">📣 Обяви</div>'+anns.map(a=>`<div class="info"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}<div class="muted" style="font-size:.75rem;margin-top:4px">${fmtDate(a.created_at)}</div></div>`).join('');}
+  if(anns&&anns.length){html+='<div style="font-weight:700;margin:6px 0 4px">📣 Обяви</div>'+anns.map(a=>`<div class="info" style="color:var(--ink)"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}<div class="muted" style="font-size:.75rem;margin-top:4px">${fmtDate(a.created_at)}</div></div>`).join('');}
   if(polls&&polls.length){html+='<div style="font-weight:700;margin:14px 0 4px">🗳️ Анкети</div><div id="pollsWrap"></div>';}
   const b=$('newsBody'); if(!b)return;
   b.innerHTML= html || '<div class="center">Няма нови известия</div>';
@@ -702,7 +702,7 @@ async function renderPoll(p){
   try{const {data:r}=await sb.rpc('get_poll_results',{p_poll_id:p.id});(r||[]).forEach(x=>{results[x.option_index]=x.vote_count;total+=x.vote_count;});}catch(e){}
   if(USER){try{const {data:mv}=await sb.rpc('get_my_vote',{p_poll_id:p.id});if(mv!==null&&mv!==undefined)myVote=mv;}catch(e){}}
   const voted = myVote!==null;
-  const el=document.createElement('div'); el.className='info'; el.style.display='block';
+  const el=document.createElement('div'); el.className='info'; el.style.display='block'; el.style.color='var(--ink)';
   el.innerHTML=`<div style="font-weight:600;margin-bottom:8px">${escapeHtml(p.question||'')}</div>`+
     opts.map((o,i)=>{
       const c=results[i]||0, pct=total?Math.round(c*100/total):0, mine=i===myVote;
