@@ -158,7 +158,7 @@ async function loadCatalog(){
   }catch(e){}
   const all=[]; let from=0;
   while(true){
-    const {data,error}=await sb.from('products').select(CATALOG_COLS).eq('is_active',true).gt('price',0).order('name').range(from,from+999);
+    const {data,error}=await sb.from('products').select(CATALOG_COLS).eq('is_active',true).order('name').range(from,from+999);
     if(error){$('status').textContent='Грешка при зареждане: '+error.message;return;}
     all.push(...data); if(data.length<1000)break; from+=1000;
   }
@@ -179,10 +179,14 @@ function renderGrid(){
   if(!list.length){$('grid').innerHTML='<div class="center">Няма намерени продукти</div>';return;}
   $('grid').innerHTML=list.map(p=>{
     const inCart=CART[p.id];
-    const dp=discounted(p), has=p.discount_percent>0;
+    const dp=discounted(p), has=p.discount_percent>0, priced=dp>0;
     const img=p.image_url?`<img src="${p.image_url}" loading="lazy" alt="">`:`<span class="ph">🛒</span>`;
-    const priceHtml=`<div class="price">${money(dp)}${p.is_weighted?'<span class="muted" style="font-size:.7rem">/кг</span>':''}${has?`<span class="old">${money(p.price)}</span>`:''}</div>`;
-    const control=inCart
+    const priceHtml= priced
+      ? `<div class="price">${money(dp)}${p.is_weighted?'<span class="muted" style="font-size:.7rem">/кг</span>':''}${has?`<span class="old">${money(p.price)}</span>`:''}</div>`
+      : `<div class="muted" style="font-size:.85rem;font-weight:600">Цена скоро</div>`;
+    const control= !priced
+      ? `<button class="add" disabled style="opacity:.5;cursor:default">Очаквайте</button>`
+      : inCart
       ? `<div class="stepper"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(inCart.qty)} ${unitLabel(p)}</span><button data-inc="${p.id}">＋</button></div>`
       : `<button class="add" data-add="${p.id}">Добави</button>`;
     return `<div class="card">
@@ -200,7 +204,7 @@ function renderGrid(){
 }
 
 // ---------- кошница ----------
-function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p)return;CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
+function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p||discounted(p)<=0)return;CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
 function changeQty(id,dir){const it=CART[id];if(!it)return;const s=step(it.product);it.qty=Math.round((it.qty+dir*s)*1000)/1000;if(it.qty<=0)delete CART[id];saveCart();renderGrid();renderCart();}
 function cartArr(){return Object.values(CART);}
 function subtotal(){return cartArr().reduce((s,i)=>s+discounted(i.product)*i.qty,0);}
