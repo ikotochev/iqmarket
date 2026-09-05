@@ -106,6 +106,8 @@
     padding:12px 18px;border-radius:12px;z-index:80;font-weight:600;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
   .toast.show{opacity:.96}
   .info{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.85rem;color:var(--ink-soft);margin:10px 0}
+  .ordrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;text-align:left;color:var(--ink)}
+  .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
 </style>
 
 <header>
@@ -115,6 +117,7 @@
       IQ Market
     </a>
     <span class="spacer"></span>
+    <button class="hbtn" id="ordersBtn" hidden>📦 Поръчки</button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn primary cart-btn" id="cartBtn">🛒 Кошница
       <span class="badge" id="cartBadge" hidden>0</span>
@@ -306,6 +309,8 @@ async function refreshUser(){
   if(USER){const {data:pr}=await sb.from('profiles').select('*').eq('id',USER.id).maybeSingle();PROFILE=pr;}
   else PROFILE=null;
   $('accountBtn').textContent= PROFILE? (PROFILE.name?.split(' ')[0]||'Профил') : 'Вход';
+  $('ordersBtn').hidden = !PROFILE;
+  if(USER) watchOrders();
 }
 function openModal(html){$('sheet').innerHTML=html;$('modal').classList.add('open');}
 function closeModal(){$('modal').classList.remove('open');}
@@ -432,14 +437,69 @@ async function placeOrder(){
       <p class="muted">Номер: #${String(orderId).slice(0,8)}</p>
       ${total!=null?`<p><strong>Общо: ${money(total)}</strong></p>`:''}
       <p class="muted">Складът вече я вижда. Ще доставим възможно най-скоро.</p>
-      <button class="big" onclick="document.getElementById('modal').classList.remove('open')">Разбрах</button>
+      <button class="big" id="okOrders">Проследи поръчката</button>
+      <button class="big" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)" onclick="document.getElementById('modal').classList.remove('open')">Разбрах</button>
     </div>`);
+    $('okOrders').onclick=ordersModal;
   }catch(e){err.textContent='Грешка: '+e.message;$('coGo').disabled=false;$('coGo').textContent='Поръчай сега';}
+}
+
+// ---------- моите поръчки + проследяване ----------
+const SUPPORT='0896277066';
+const HIDDEN_PAY=['awaiting_payment','canceled','failed'];
+const ORDER_STATUS={pending:['Приета','#E67E22'],preparing:['Приготвя се','#2980B9'],ready:['Готова','#27AE60'],on_the_way:['На път към теб','#E67E22'],delivered:['Доставена','#27AE60'],cancelled:['Отказана','#C0392B']};
+function stInfo(s){return ORDER_STATUS[s]||['—','#777'];}
+function fmtDate(iso){try{const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return `${p(d.getDate())}.${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;}catch(e){return '';}}
+let ordersChan=null;
+function watchOrders(){
+  if(ordersChan||!USER)return;
+  ordersChan=sb.channel('orders_'+USER.id).on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'client_id=eq.'+USER.id},()=>{ if($('ordList'))renderOrders(); }).subscribe();
+}
+async function ordersModal(){
+  if(!USER){authModal('login');return;}
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div><h2>Моите поръчки</h2><div id="ordList"><div class="center">Зареждане…</div></div>`);
+  renderOrders();
+}
+async function renderOrders(){
+  const box=$('ordList'); if(!box)return;
+  const {data,error}=await sb.from('orders').select('id,status,total,client_address,created_at,payment_status').eq('client_id',USER.id).order('created_at',{ascending:false}).limit(40);
+  if(error){box.innerHTML='<div class="center">Грешка при зареждане</div>';return;}
+  const list=(data||[]).filter(o=>!HIDDEN_PAY.includes(o.payment_status));
+  if(!list.length){box.innerHTML='<div class="center">Нямаш поръчки още</div>';return;}
+  box.innerHTML=list.map(o=>{const[t,c]=stInfo(o.status);return `<button class="ordrow" data-o="${o.id}">
+    <div><div style="font-weight:700">Поръчка #${String(o.id).slice(0,8)}</div><div class="muted" style="font-size:.8rem">${fmtDate(o.created_at)} · ${money(o.total)}</div></div>
+    <span class="stbadge" style="background:${c}">${t}</span></button>`;}).join('');
+  box.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>orderDetail(b.dataset.o));
+}
+async function orderDetail(id){
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" id="odBack">←</button><div style="clear:both"></div><div id="odBody"><div class="center">Зареждане…</div></div>`);
+  $('odBack').onclick=ordersModal;
+  const [{data:o},{data:items}]=await Promise.all([
+    sb.from('orders').select('*').eq('id',id).maybeSingle(),
+    sb.from('order_items').select('*, products(name,unit,is_weighted)').eq('order_id',id)
+  ]);
+  if(!o){const b=$('odBody');if(b)b.innerHTML='<div class="center">Няма такава поръчка</div>';return;}
+  const[t,c]=stInfo(o.status);
+  const pend=(items||[]).some(i=>i.products?.is_weighted && i.actual_qty==null);
+  const its=(items||[]).map(i=>{const nm=i.products?.name||'';const w=i.products?.is_weighted;const q=(i.actual_qty??i.qty);const u=w?'кг':(i.products?.unit||'бр.');
+    return `<div class="rowb"><span>${escapeHtml(nm)} × ${fmtQty(q)} ${u}${w&&i.actual_qty==null?' (претегля се)':''}</span><span>${money((i.price||0)*q)}</span></div>`;}).join('');
+  const b=$('odBody'); if(!b)return;
+  b.innerHTML=`
+    <h2 style="margin:2px 0 8px">Поръчка #${String(id).slice(0,8)}</h2>
+    <div style="text-align:center;margin:10px 0"><span class="stbadge" style="background:${c};font-size:1rem;padding:8px 18px">${t}</span></div>
+    ${o.status==='on_the_way'?'<div class="info">🚴 Доставчикът е на път към теб!</div>':''}
+    <div class="info">📍 ${escapeHtml(o.client_address||'')}</div>
+    <div style="margin:14px 0 6px;font-weight:700">Артикули</div>
+    ${its||'<div class="muted">—</div>'}
+    <div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
+    ${pend?'<div class="muted" style="font-size:.8rem;margin-top:6px">⚖️ Част от продуктите се претеглят — крайната цена може леко да варира.</div>':''}
+    <div class="info" style="margin-top:14px">При проблем: <a href="tel:${SUPPORT}">${SUPPORT}</a></div>`;
 }
 
 // ---------- events ----------
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
 $('cartBtn').onclick=openCart;
+$('ordersBtn').onclick=ordersModal;
 $('closeCart').onclick=closeCart;
 $('overlay').onclick=closeCart;
 $('checkoutBtn').onclick=checkout;
