@@ -11,6 +11,9 @@
   @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --bg:#0D130F;--surface:#141C16;--surface-2:#1B241D;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
     --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}}
+  :root[data-theme="dark"]{
+    --bg:#0D130F;--surface:#141C16;--surface-2:#1B241D;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
   a{color:var(--brand);text-decoration:none}
@@ -121,6 +124,7 @@
   .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
 </style>
 
+<script>try{var _t=localStorage.getItem('iqm_theme');if(_t&&_t!=='system')document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
 <header>
   <div class="bar">
     <a class="brand" href="index.html">
@@ -128,6 +132,7 @@
       IQ Market
     </a>
     <span class="spacer"></span>
+    <button class="hbtn" id="themeBtn" title="Тема">🌓</button>
     <button class="hbtn cart-btn" id="newsBtn" title="Известия и анкети">🔔<span class="badge" id="newsBadge" hidden>0</span></button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn cart-btn" id="cartBtn">🛒 Кошница
@@ -646,6 +651,7 @@ async function orderDetail(id){
 // ---------- events ----------
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
 $('cartBtn').onclick=openCart;
+$('themeBtn').onclick=cycleTheme;
 $('newsBtn').onclick=newsModal;
 $('lightbox').onclick=()=>$('lightbox').classList.remove('open');
 $('closeCart').onclick=closeCart;
@@ -715,7 +721,21 @@ async function renderPoll(p){
   el.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{try{await sb.rpc('vote_poll',{p_poll_id:b.dataset.poll,p_option_index:+b.dataset.opt});toast('Благодарим за гласа!');newsModal();}catch(e){toast('Грешка при гласуване');}});
 }
 
+// ---------- тема ----------
+const THEMES=['system','light','dark'];
+const THEME_ICON={system:'🌓',light:'☀️',dark:'🌙'};
+const THEME_LABEL={system:'Системна',light:'Светла',dark:'Тъмна'};
+function getTheme(){try{return localStorage.getItem('iqm_theme')||'system';}catch(e){return 'system';}}
+function applyTheme(m){
+  if(m==='system')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',m);
+  const b=$('themeBtn'); if(b)b.textContent=THEME_ICON[m]||'🌓';
+  try{localStorage.setItem('iqm_theme',m);}catch(e){}
+}
+function cycleTheme(){const cur=getTheme();const next=THEMES[(THEMES.indexOf(cur)+1)%THEMES.length];applyTheme(next);toast('Тема: '+THEME_LABEL[next]);}
+
 // ---------- init ----------
+applyTheme(getTheme());
 renderCartBadge();
 refreshUser();
 loadCatalog();
