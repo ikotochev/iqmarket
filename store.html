@@ -128,7 +128,7 @@
       IQ Market
     </a>
     <span class="spacer"></span>
-    <button class="hbtn" id="newsBtn" title="Известия и анкети">🔔</button>
+    <button class="hbtn cart-btn" id="newsBtn" title="Известия и анкети">🔔<span class="badge" id="newsBadge" hidden>0</span></button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn primary cart-btn" id="cartBtn">🛒 Кошница
       <span class="badge" id="cartBadge" hidden>0</span>
@@ -666,7 +666,22 @@ async function loadAnnounce(){
 }
 
 // ---------- известия + анкети ----------
+let NEWS_IDS=[];
+async function loadNewsBadge(){
+  try{
+    const [{data:a},{data:p}]=await Promise.all([
+      sb.from('announcements').select('id').eq('is_active',true),
+      sb.from('polls').select('id').eq('is_active',true)
+    ]);
+    NEWS_IDS=[...(a||[]).map(x=>'a'+x.id),...(p||[]).map(x=>'p'+x.id)];
+    let seen=[]; try{seen=JSON.parse(localStorage.getItem('iqm_seen_news')||'[]');}catch(e){}
+    const unseen=NEWS_IDS.filter(i=>!seen.includes(i)).length;
+    const b=$('newsBadge'); if(b){b.textContent=unseen;b.hidden=unseen===0;}
+  }catch(e){}
+}
+function markNewsSeen(){try{localStorage.setItem('iqm_seen_news',JSON.stringify(NEWS_IDS));}catch(e){}const b=$('newsBadge');if(b)b.hidden=true;}
 async function newsModal(){
+  markNewsSeen();
   openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div><h2>Известия</h2><div id="newsBody"><div class="center">Зареждане…</div></div>`);
   const [{data:anns},{data:polls}]=await Promise.all([
     sb.from('announcements').select('title,body,created_at').eq('is_active',true).order('created_at',{ascending:false}),
@@ -705,4 +720,5 @@ renderCartBadge();
 refreshUser();
 loadCatalog();
 loadAnnounce();
+loadNewsBadge();
 </script>
