@@ -4,7 +4,7 @@
 <style>
   :root{
     --bg:#F5F7F1;--surface:#FFFFFF;--surface-2:#EEF3EA;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
-    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--danger:#C0392B;--maxw:1500px;
+    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--danger:#C0392B;--maxw:1760px;
     --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   }
   @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -16,7 +16,7 @@
   button{font-family:inherit;cursor:pointer}
   /* header */
   header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
-  .bar{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 18px}
+  .bar{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 14px}
   .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.1rem;color:var(--ink)}
   .mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(160deg,var(--brand),var(--brand-deep));display:grid;place-items:center}
   .mark svg{width:19px;height:19px}
@@ -28,7 +28,7 @@
   .badge{position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border-radius:20px;font-size:.7rem;
     min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px;font-weight:700}
   /* layout */
-  main{max-width:var(--maxw);margin:0 auto;padding:18px}
+  main{max-width:var(--maxw);margin:0 auto;padding:16px 14px}
   .search{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:1rem;margin-bottom:14px}
   /* layout: категории отстрани + съдържание */
   .layout{display:grid;grid-template-columns:214px 1fr;gap:20px;align-items:start}
