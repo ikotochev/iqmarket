@@ -1,0 +1,382 @@
+<title>Магазин — IQ Market</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F5F7F1;--surface:#FFFFFF;--surface-2:#EEF3EA;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
+    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--danger:#C0392B;--maxw:1080px;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0D130F;--surface:#141C16;--surface-2:#1B241D;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none}
+  button{font-family:inherit;cursor:pointer}
+  /* header */
+  header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+  .bar{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 18px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.1rem;color:var(--ink)}
+  .mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(160deg,var(--brand),var(--brand-deep));display:grid;place-items:center}
+  .mark svg{width:19px;height:19px}
+  .spacer{flex:1}
+  .hbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:10px;padding:8px 12px;font-size:.9rem;font-weight:600}
+  .hbtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .cart-btn{position:relative}
+  .badge{position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;border-radius:20px;font-size:.7rem;
+    min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px;font-weight:700}
+  /* layout */
+  main{max-width:var(--maxw);margin:0 auto;padding:18px}
+  .search{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:1rem;margin-bottom:14px}
+  .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;-webkit-overflow-scrolling:touch}
+  .chip{white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+    border-radius:20px;padding:7px 14px;font-size:.88rem;font-weight:600}
+  .chip.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .card .img{aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+  .card .img img{width:100%;height:100%;object-fit:cover}
+  .card .img .ph{font-size:2.4rem;opacity:.5}
+  .card .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+  .card .name{font-size:.92rem;font-weight:600;line-height:1.25;min-height:2.3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .brand-s{font-size:.75rem;color:var(--ink-faint)}
+  .price{font-weight:800;color:var(--brand);font-size:1.05rem}
+  .price .old{font-weight:500;color:var(--ink-faint);text-decoration:line-through;font-size:.8rem;margin-left:5px}
+  .addrow{margin-top:auto;display:flex;align-items:center;gap:8px}
+  .add{flex:1;background:var(--brand);color:#fff;border:none;border-radius:10px;padding:9px;font-weight:700;font-size:.88rem}
+  .stepper{display:flex;align-items:center;gap:0;border:1px solid var(--brand);border-radius:10px;overflow:hidden;flex:1}
+  .stepper button{background:var(--surface);color:var(--brand);border:none;width:34px;height:36px;font-size:1.2rem;font-weight:700}
+  .stepper .q{flex:1;text-align:center;font-weight:700;font-size:.9rem}
+  .muted{color:var(--ink-faint)}
+  .center{text-align:center;padding:50px 20px;color:var(--ink-faint)}
+  /* drawer + modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:none}
+  .overlay.open{display:block}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(420px,100%);background:var(--bg);z-index:50;
+    transform:translateX(100%);transition:transform .25s;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .drawer header{position:static}
+  .dhead{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .dhead h2{margin:0;font-size:1.15rem}
+  .x{margin-left:auto;border:none;background:transparent;font-size:1.5rem;color:var(--ink-soft);line-height:1}
+  .ditems{flex:1;overflow-y:auto;padding:12px 16px}
+  .citem{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+  .citem .ci-img{width:52px;height:52px;border-radius:10px;background:var(--surface-2);object-fit:cover;flex-shrink:0}
+  .citem .ci-name{font-size:.86rem;font-weight:600;line-height:1.2}
+  .citem .ci-price{font-size:.8rem;color:var(--ink-faint)}
+  .dfoot{border-top:1px solid var(--line);padding:16px 18px;background:var(--surface)}
+  .rowb{display:flex;justify-content:space-between;align-items:center;margin:5px 0}
+  .big{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:14px;font-size:1.05rem;font-weight:800;width:100%;margin-top:10px}
+  .big:disabled{opacity:.5}
+  /* modal (auth/checkout) */
+  .modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5)}
+  .modal.open{display:flex}
+  .sheet{background:var(--bg);border-radius:16px;width:min(440px,100%);max-height:92vh;overflow-y:auto;padding:22px}
+  .sheet h2{margin:0 0 4px}
+  .tabs{display:flex;gap:6px;margin:14px 0}
+  .tabs button{flex:1;padding:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:10px;font-weight:700}
+  .tabs button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  label{display:block;font-size:.82rem;font-weight:600;margin:12px 0 5px;color:var(--ink-soft)}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:1rem;font-family:inherit}
+  .err{color:var(--danger);font-size:.85rem;margin-top:10px;min-height:1em}
+  .ok-box{text-align:center;padding:16px}
+  .ok-box .big-check{font-size:3rem}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+    padding:12px 18px;border-radius:12px;z-index:80;font-weight:600;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
+  .toast.show{opacity:.96}
+  .info{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.85rem;color:var(--ink-soft);margin:10px 0}
+</style>
+
+<header>
+  <div class="bar">
+    <a class="brand" href="index.html">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 10.5a1.5 1.5 0 0 0 1.5 1.3h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7"/><circle cx="10" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/></svg></span>
+      IQ Market
+    </a>
+    <span class="spacer"></span>
+    <button class="hbtn" id="accountBtn">Вход</button>
+    <button class="hbtn primary cart-btn" id="cartBtn">🛒 Кошница
+      <span class="badge" id="cartBadge" hidden>0</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <input class="search" id="search" placeholder="Търсене на продукт...">
+  <div class="cats" id="cats"></div>
+  <div id="grid" class="grid"></div>
+  <div id="status" class="center">Зареждане…</div>
+</main>
+
+<!-- Кошница -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer">
+  <div class="dhead"><h2>Кошница</h2><button class="x" id="closeCart">×</button></div>
+  <div class="ditems" id="cartItems"></div>
+  <div class="dfoot">
+    <div class="rowb"><span class="muted">Междинна сума</span><strong id="subtotal">0.00 €</strong></div>
+    <div class="rowb" id="feeRow" hidden><span class="muted">Доставка</span><span id="fee">—</span></div>
+    <div class="rowb" id="minRow" hidden></div>
+    <button class="big" id="checkoutBtn">Поръчай</button>
+  </div>
+</aside>
+
+<!-- Модал (вход/регистрация/поръчка/успех) -->
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL='https://opmnvrwnsqblyrtlogcj.supabase.co';
+const SUPABASE_KEY='sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CAT_EMOJI={'Всички':'🛒','Консерви':'🥫','Хранителни':'🍝','За дома':'🧽','Захарни':'🍬','Напитки':'🥤','Млечни':'🥛','Олио и подправки':'🫒','Месо':'🥩','Хляб и сладкиши':'🍫','Замразени':'❄️','Козметика':'🧴','Плодове и зеленчуци':'🥦','Суха храна':'🌾','Зеленчуци':'🥕','Плодове':'🍎'};
+const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted';
+
+let PRODUCTS=[], CATS=['Всички'], HIDDEN=[], CAT='Всички', SEARCH='';
+let CART=loadCart();       // {product_id: {product, qty}}
+let USER=null, PROFILE=null;
+
+// ---------- utils ----------
+const $=id=>document.getElementById(id);
+const money=n=>Number(n).toFixed(2)+' €';
+const fmtQty=q=> q===Math.round(q)? String(q): String(q);
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function discounted(p){return p.discount_percent>0? p.price*(1-p.discount_percent/100): p.price;}
+function step(p){return p.is_weighted?0.5:1;}
+function unitLabel(p){return p.is_weighted?'кг':(p.unit||'бр.');}
+function loadCart(){try{return JSON.parse(localStorage.getItem('iqm_cart')||'{}');}catch(e){return {};}}
+function saveCart(){localStorage.setItem('iqm_cart', JSON.stringify(CART));renderCartBadge();}
+
+// ---------- каталог ----------
+async function loadCatalog(){
+  try{
+    const {data:hs}=await sb.from('app_settings').select('value').eq('key','hidden_categories').maybeSingle();
+    if(hs && Array.isArray(hs.value)) HIDDEN=hs.value;
+  }catch(e){}
+  const all=[]; let from=0;
+  while(true){
+    const {data,error}=await sb.from('products').select(CATALOG_COLS).eq('is_active',true).order('name').range(from,from+999);
+    if(error){$('status').textContent='Грешка при зареждане: '+error.message;return;}
+    all.push(...data); if(data.length<1000)break; from+=1000;
+  }
+  PRODUCTS=all.filter(p=>!HIDDEN.includes(p.category));
+  const set=[...new Set(PRODUCTS.map(p=>p.category).filter(Boolean))].sort();
+  CATS=['Всички',...set];
+  $('status').style.display='none';
+  renderCats(); renderGrid();
+}
+function renderCats(){
+  $('cats').innerHTML=CATS.map(c=>`<button class="chip ${c===CAT?'active':''}" data-c="${c}">${CAT_EMOJI[c]||'🏷️'} ${c}</button>`).join('');
+  $('cats').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;renderCats();renderGrid();});
+}
+function renderGrid(){
+  let list=PRODUCTS;
+  if(CAT!=='Всички') list=list.filter(p=>p.category===CAT);
+  if(SEARCH.trim()){const q=SEARCH.trim().toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q));}
+  if(!list.length){$('grid').innerHTML='<div class="center">Няма намерени продукти</div>';return;}
+  $('grid').innerHTML=list.map(p=>{
+    const inCart=CART[p.id];
+    const dp=discounted(p), has=p.discount_percent>0;
+    const img=p.image_url?`<img src="${p.image_url}" loading="lazy" alt="">`:`<span class="ph">🛒</span>`;
+    const priceHtml=`<div class="price">${money(dp)}${p.is_weighted?'<span class="muted" style="font-size:.7rem">/кг</span>':''}${has?`<span class="old">${money(p.price)}</span>`:''}</div>`;
+    const control=inCart
+      ? `<div class="stepper"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(inCart.qty)} ${unitLabel(p)}</span><button data-inc="${p.id}">＋</button></div>`
+      : `<button class="add" data-add="${p.id}">Добави</button>`;
+    return `<div class="card">
+      <div class="img">${img}</div>
+      <div class="body">
+        ${p.brand?`<div class="brand-s">${p.brand}</div>`:''}
+        <div class="name">${p.name||''}</div>
+        ${priceHtml}
+        <div class="addrow">${control}</div>
+      </div></div>`;
+  }).join('');
+  $('grid').querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>addToCart(b.dataset.add));
+  $('grid').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
+  $('grid').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
+}
+
+// ---------- кошница ----------
+function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p)return;CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
+function changeQty(id,dir){const it=CART[id];if(!it)return;const s=step(it.product);it.qty=Math.round((it.qty+dir*s)*1000)/1000;if(it.qty<=0)delete CART[id];saveCart();renderGrid();renderCart();}
+function cartArr(){return Object.values(CART);}
+function subtotal(){return cartArr().reduce((s,i)=>s+discounted(i.product)*i.qty,0);}
+function renderCartBadge(){const n=cartArr().length;const b=$('cartBadge');b.textContent=n;b.hidden=n===0;}
+function renderCart(){
+  const items=cartArr();
+  $('cartItems').innerHTML= items.length? items.map(i=>{
+    const p=i.product,img=p.image_url?`<img class="ci-img" src="${p.image_url}" alt="">`:`<div class="ci-img" style="display:grid;place-items:center">🛒</div>`;
+    return `<div class="citem">${img}
+      <div style="flex:1">
+        <div class="ci-name">${p.name}</div>
+        <div class="ci-price">${money(discounted(p))} × ${fmtQty(i.qty)} ${unitLabel(p)} = <strong>${money(discounted(p)*i.qty)}</strong></div>
+      </div>
+      <div class="stepper" style="width:104px;flex:none"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(i.qty)}</span><button data-inc="${p.id}">＋</button></div>
+    </div>`;
+  }).join('') : '<div class="center">Кошницата е празна</div>';
+  $('cartItems').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
+  $('cartItems').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
+  $('subtotal').textContent=money(subtotal());
+  const weighted=items.some(i=>i.product.is_weighted);
+  $('minRow').hidden=true;
+  $('checkoutBtn').disabled=items.length===0;
+  $('checkoutBtn').textContent= weighted? 'Поръчай (цена след претегляне)':'Поръчай';
+}
+function openCart(){renderCart();$('overlay').classList.add('open');$('drawer').classList.add('open');}
+function closeCart(){$('overlay').classList.remove('open');$('drawer').classList.remove('open');}
+
+// ---------- auth ----------
+const clean=p=>p.replace(/[^0-9+]/g,'');
+async function refreshUser(){
+  const {data}=await sb.auth.getUser(); USER=data?.user||null;
+  if(USER){const {data:pr}=await sb.from('profiles').select('*').eq('id',USER.id).maybeSingle();PROFILE=pr;}
+  else PROFILE=null;
+  $('accountBtn').textContent= PROFILE? (PROFILE.name?.split(' ')[0]||'Профил') : 'Вход';
+}
+function openModal(html){$('sheet').innerHTML=html;$('modal').classList.add('open');}
+function closeModal(){$('modal').classList.remove('open');}
+
+function authModal(tab='login'){
+  openModal(`
+    <h2>Добре дошъл</h2>
+    <p class="muted" style="margin:4px 0 0;font-size:.9rem">Влез или се регистрирай, за да поръчаш.</p>
+    <div class="tabs"><button id="tL" class="${tab==='login'?'active':''}">Вход</button><button id="tR" class="${tab==='reg'?'active':''}">Регистрация</button></div>
+    <div id="authBody"></div>
+    <button class="x" style="position:absolute" hidden></button>
+  `);
+  $('tL').onclick=()=>authModal('login'); $('tR').onclick=()=>authModal('reg');
+  $('authBody').innerHTML = tab==='login'? loginForm(): regForm();
+  if(tab==='login'){
+    $('doLogin').onclick=doLogin;
+  }else{
+    loadZones(); $('doReg').onclick=doReg;
+  }
+}
+function loginForm(){return `
+  <label>Телефон</label><input id="lPhone" type="tel" placeholder="0888123456">
+  <label>Парола</label><input id="lPass" type="password">
+  <div class="err" id="authErr"></div>
+  <button class="big" id="doLogin">Влез</button>`;}
+function regForm(){return `
+  <label>Име</label><input id="rName" placeholder="Три имена">
+  <label>Телефон</label><input id="rPhone" type="tel" placeholder="0888123456">
+  <label>Населено място</label><select id="rZone"><option value="">Зареждане…</option></select>
+  <label>Адрес за доставка</label><input id="rAddr" placeholder="кв., бл., вх., ет., ап.">
+  <label>Парола (мин. 6)</label><input id="rPass" type="password">
+  <label>Код за покана (по избор)</label><input id="rRef" placeholder="">
+  <div class="err" id="authErr"></div>
+  <button class="big" id="doReg">Създай акаунт</button>`;}
+async function loadZones(){
+  const {data}=await sb.from('delivery_zones').select('name,min_order').eq('active',true).order('sort_order');
+  const sel=$('rZone'); if(!sel)return;
+  sel.innerHTML='<option value="">Избери населено място</option>'+(data||[]).map(z=>`<option value="${z.name}">${z.name}</option>`).join('');
+}
+async function doLogin(){
+  const err=$('authErr'); err.textContent='';
+  const phone=clean($('lPhone').value), pass=$('lPass').value;
+  if(!phone||!pass){err.textContent='Попълни телефон и парола';return;}
+  $('doLogin').disabled=true;
+  try{
+    const {data:uid,error:e1}=await sb.rpc('get_id_by_phone',{phone_number:phone});
+    if(e1||!uid){err.textContent='Телефонът не е регистриран';$('doLogin').disabled=false;return;}
+    const {error:e2}=await sb.auth.signInWithPassword({email:uid+'@dostavka.app',password:pass});
+    if(e2){err.textContent='Грешна парола';$('doLogin').disabled=false;return;}
+    await refreshUser(); closeModal(); toast('Добре дошъл!');
+  }catch(e){err.textContent='Грешка: '+e.message;$('doLogin').disabled=false;}
+}
+function genCode(){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');}
+async function doReg(){
+  const err=$('authErr'); err.textContent='';
+  const name=$('rName').value.trim(), phone=clean($('rPhone').value), zone=$('rZone').value,
+        addr=$('rAddr').value.trim(), pass=$('rPass').value, ref=$('rRef').value.trim().toUpperCase();
+  if(!name||!phone||!zone||!addr||!pass){err.textContent='Попълни всички полета';return;}
+  if(phone.replace(/[^0-9]/g,'').length!==10){err.textContent='Телефонът трябва да е 10 цифри';return;}
+  if(pass.length<6){err.textContent='Паролата трябва да е поне 6 символа';return;}
+  $('doReg').disabled=true;
+  try{
+    const {data:ex}=await sb.from('profiles').select('id').eq('phone',phone).maybeSingle();
+    if(ex){err.textContent='Този телефон вече е регистриран';$('doReg').disabled=false;return;}
+    const uuid=crypto.randomUUID(); const email=uuid+'@dostavka.app';
+    const {data:su,error:e1}=await sb.auth.signUp({email,password:pass});
+    if(e1||!su.user){err.textContent='Регистрацията не успя: '+(e1?.message||'');$('doReg').disabled=false;return;}
+    let referredBy=null;
+    if(ref){const {data:r}=await sb.from('profiles').select('id').eq('referral_code',ref).maybeSingle();if(r)referredBy=ref;}
+    const {error:e2}=await sb.from('profiles').insert({id:su.user.id,name,phone,role:'client',address:addr+', '+zone,zone,referral_code:genCode(),referred_by:referredBy,referral_discount:0});
+    if(e2){err.textContent='Профилът не се създаде: '+e2.message;$('doReg').disabled=false;return;}
+    await refreshUser(); closeModal(); toast('Акаунтът е създаден!');
+  }catch(e){err.textContent='Грешка: '+e.message;$('doReg').disabled=false;}
+}
+async function logout(){await sb.auth.signOut();await refreshUser();toast('Излязохте');}
+
+// ---------- поръчка ----------
+async function checkout(){
+  if(!cartArr().length)return;
+  if(!USER||!PROFILE){authModal('login');return;}
+  // зонов минимум за информация
+  let minOrder=0;
+  try{
+    const {data:z}=await sb.from('delivery_zones').select('min_order,delivery_fee,free_over').eq('name',PROFILE.zone).maybeSingle();
+    if(z)minOrder=Number(z.min_order)||0;
+  }catch(e){}
+  const sub=subtotal();
+  const weighted=cartArr().some(i=>i.product.is_weighted);
+  openModal(`
+    <h2>Потвърди поръчката</h2>
+    <label>Адрес за доставка</label>
+    <textarea id="coAddr" rows="2">${(PROFILE.address||'').replace(/</g,'&lt;')}</textarea>
+    <div class="info">Плащане: <strong>в брой при доставка</strong> (плащане с карта е налично в мобилното приложение).</div>
+    ${minOrder&&sub<minOrder?`<div class="err">Минимална поръчка за ${PROFILE.zone}: ${money(minOrder)} · сега имаш ${money(sub)}</div>`:''}
+    ${weighted?`<div class="info">⚖️ Част от продуктите са на килограм — крайната цена се определя след претегляне и ще получиш известие.</div>`:''}
+    <div class="rowb" style="margin-top:12px"><span class="muted">Продукти</span><strong>${money(sub)}</strong></div>
+    <div class="info">Таксата за доставка се добавя според зоната ти (безплатна над определена сума).</div>
+    <div class="err" id="coErr"></div>
+    <button class="big" id="coGo" ${minOrder&&sub<minOrder?'disabled':''}>Поръчай сега</button>
+  `);
+  $('coGo').onclick=placeOrder;
+}
+async function placeOrder(){
+  const err=$('coErr'); err.textContent='';
+  const addr=$('coAddr').value.trim();
+  if(!addr){err.textContent='Въведи адрес';return;}
+  $('coGo').disabled=true; $('coGo').textContent='Изпращане…';
+  try{
+    const items=cartArr().map(i=>({product_id:i.product.id, qty:i.qty}));
+    const {data:orderId,error}=await sb.rpc('create_order',{p_address:addr,p_payment_method:'cash',p_delivery_time:null,p_items:items});
+    if(error){
+      let m=error.message||'Грешка';
+      if(m.includes('под минимума')) m='Поръчката е под минимума за твоята зона.';
+      err.textContent=m; $('coGo').disabled=false; $('coGo').textContent='Поръчай сега'; return;
+    }
+    // успех
+    CART={}; saveCart(); renderGrid();
+    let total=null;
+    try{const {data:o}=await sb.from('orders').select('total').eq('id',orderId).maybeSingle();if(o)total=o.total;}catch(e){}
+    closeCart();
+    openModal(`<div class="ok-box">
+      <div class="big-check">✅</div>
+      <h2>Поръчката е приета!</h2>
+      <p class="muted">Номер: #${String(orderId).slice(0,8)}</p>
+      ${total!=null?`<p><strong>Общо: ${money(total)}</strong></p>`:''}
+      <p class="muted">Складът вече я вижда. Ще доставим възможно най-скоро.</p>
+      <button class="big" onclick="document.getElementById('modal').classList.remove('open')">Разбрах</button>
+    </div>`);
+  }catch(e){err.textContent='Грешка: '+e.message;$('coGo').disabled=false;$('coGo').textContent='Поръчай сега';}
+}
+
+// ---------- events ----------
+$('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
+$('cartBtn').onclick=openCart;
+$('closeCart').onclick=closeCart;
+$('overlay').onclick=closeCart;
+$('checkoutBtn').onclick=checkout;
+$('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};
+$('accountBtn').onclick=()=>{ if(PROFILE){ openModal(`<h2>${PROFILE.name||'Профил'}</h2><p class="muted">${PROFILE.phone||''} · ${PROFILE.zone||''}</p><div class="info">${(PROFILE.address||'')}</div><button class="big" id="lo">Изход</button>`); $('lo').onclick=()=>{logout();closeModal();}; } else authModal('login'); };
+
+// ---------- init ----------
+renderCartBadge();
+refreshUser();
+loadCatalog();
+</script>
