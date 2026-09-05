@@ -30,11 +30,30 @@
   /* layout */
   main{max-width:var(--maxw);margin:0 auto;padding:18px}
   .search{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:1rem;margin-bottom:14px}
-  .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:6px;-webkit-overflow-scrolling:touch}
-  .chip{white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
-    border-radius:20px;padding:7px 14px;font-size:.88rem;font-weight:600}
-  .chip.active{background:var(--brand);border-color:var(--brand);color:#fff}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+  /* layout: категории отстрани + съдържание */
+  .layout{display:grid;grid-template-columns:214px 1fr;gap:20px;align-items:start}
+  .side{position:sticky;top:80px}
+  .side-title{font-size:.75rem;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 8px 6px}
+  .catlist{display:flex;flex-direction:column;gap:2px}
+  .catlink{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;color:var(--ink-soft);
+    font-weight:600;font-size:.9rem;border:1px solid transparent;text-align:left;background:transparent;width:100%}
+  .catlink .cnt{margin-left:auto;font-size:.74rem;color:var(--ink-faint)}
+  .catlink:hover{background:var(--surface)}
+  .catlink.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .catlink.active .cnt{color:#e6ffee}
+  @media(max-width:760px){
+    .layout{grid-template-columns:1fr;gap:8px}
+    .side{position:static}
+    .side-title{display:none}
+    .catlist{flex-direction:row;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+    .catlink{white-space:nowrap;border:1px solid var(--line);border-radius:20px;padding:7px 13px}
+    .catlink .cnt{display:none}
+  }
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  .card .img,.card .name{cursor:pointer}
+  /* детайл на продукт */
+  .det-img{width:100%;aspect-ratio:16/10;background:var(--surface-2);border-radius:12px;display:grid;place-items:center;overflow:hidden;font-size:3rem}
+  .det-img img{width:100%;height:100%;object-fit:contain}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
   .card .img{aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
   .card .img img{width:100%;height:100%;object-fit:cover}
@@ -105,9 +124,16 @@
 
 <main>
   <input class="search" id="search" placeholder="Търсене на продукт...">
-  <div class="cats" id="cats"></div>
-  <div id="grid" class="grid"></div>
-  <div id="status" class="center">Зареждане…</div>
+  <div class="layout">
+    <aside class="side">
+      <div class="side-title">Категории</div>
+      <div class="catlist" id="cats"></div>
+    </aside>
+    <section class="content">
+      <div id="grid" class="grid"></div>
+      <div id="status" class="center">Зареждане…</div>
+    </section>
+  </div>
 </main>
 
 <!-- Кошница -->
@@ -169,8 +195,12 @@ async function loadCatalog(){
   renderCats(); renderGrid();
 }
 function renderCats(){
-  $('cats').innerHTML=CATS.map(c=>`<button class="chip ${c===CAT?'active':''}" data-c="${c}">${CAT_EMOJI[c]||'🏷️'} ${c}</button>`).join('');
-  $('cats').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;renderCats();renderGrid();});
+  const counts={}; PRODUCTS.forEach(p=>counts[p.category]=(counts[p.category]||0)+1);
+  $('cats').innerHTML=CATS.map(c=>{
+    const n=c==='Всички'?PRODUCTS.length:(counts[c]||0);
+    return `<button class="catlink ${c===CAT?'active':''}" data-c="${c}">${CAT_EMOJI[c]||'🏷️'} <span>${c}</span><span class="cnt">${n}</span></button>`;
+  }).join('');
+  $('cats').querySelectorAll('.catlink').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;SEARCH='';$('search').value='';renderCats();renderGrid();window.scrollTo({top:0,behavior:'smooth'});});
 }
 function renderGrid(){
   let list=PRODUCTS;
@@ -190,10 +220,10 @@ function renderGrid(){
       ? `<div class="stepper"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(inCart.qty)} ${unitLabel(p)}</span><button data-inc="${p.id}">＋</button></div>`
       : `<button class="add" data-add="${p.id}">Добави</button>`;
     return `<div class="card">
-      <div class="img">${img}</div>
+      <div class="img" data-detail="${p.id}">${img}</div>
       <div class="body">
         ${p.brand?`<div class="brand-s">${p.brand}</div>`:''}
-        <div class="name">${p.name||''}</div>
+        <div class="name" data-detail="${p.id}">${p.name||''}</div>
         ${priceHtml}
         <div class="addrow">${control}</div>
       </div></div>`;
@@ -201,6 +231,43 @@ function renderGrid(){
   $('grid').querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>addToCart(b.dataset.add));
   $('grid').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
   $('grid').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
+  $('grid').querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
+}
+
+// ---------- детайл на продукт ----------
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function openDetail(id){
+  const p=PRODUCTS.find(x=>x.id===id); if(!p)return;
+  const dp=discounted(p), has=p.discount_percent>0, priced=dp>0;
+  openModal(`
+    <button class="x" style="float:right;margin:-6px -6px 0 0" id="detX">×</button>
+    <div style="clear:both"></div>
+    <div class="det-img">${p.image_url?`<img src="${p.image_url}" alt="">`:'🛒'}</div>
+    ${p.brand?`<div class="brand-s" style="margin-top:12px">${escapeHtml(p.brand)}</div>`:''}
+    <h2 style="margin:3px 0 6px">${escapeHtml(p.name||'')}</h2>
+    ${priced
+      ? `<div class="price" style="font-size:1.35rem">${money(dp)}${p.is_weighted?'<span class="muted" style="font-size:.8rem">/кг</span>':''}${has?`<span class="old">${money(p.price)}</span>`:''}</div>`
+      : `<div class="muted" style="font-weight:700">Цена скоро</div>`}
+    ${p.description
+      ? `<p style="color:var(--ink-soft);font-size:.92rem;line-height:1.6;margin-top:14px;white-space:pre-wrap">${escapeHtml(p.description)}</p>`
+      : `<p class="muted" style="margin-top:14px">Няма описание за този продукт.</p>`}
+    <div id="detCtl" style="margin-top:18px"></div>
+  `);
+  $('detX').onclick=closeModal;
+  renderDetailControl(p);
+}
+function renderDetailControl(p){
+  const el=$('detCtl'); if(!el)return;
+  const priced=discounted(p)>0, it=CART[p.id];
+  if(!priced){el.innerHTML=`<button class="big" disabled style="opacity:.5">Очаквайте цена</button>`;return;}
+  if(it){
+    el.innerHTML=`<div class="stepper"><button data-d>−</button><span class="q">${fmtQty(it.qty)} ${unitLabel(p)}</span><button data-i>＋</button></div>`;
+    el.querySelector('[data-i]').onclick=()=>{changeQty(p.id,1);renderDetailControl(p);};
+    el.querySelector('[data-d]').onclick=()=>{changeQty(p.id,-1);renderDetailControl(p);};
+  }else{
+    el.innerHTML=`<button class="big" id="detAdd">Добави в кошницата</button>`;
+    $('detAdd').onclick=()=>{addToCart(p.id);renderDetailControl(p);};
+  }
 }
 
 // ---------- кошница ----------
