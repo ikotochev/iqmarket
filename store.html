@@ -124,7 +124,7 @@
   .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
 </style>
 
-<script>try{var _t=localStorage.getItem('iqm_theme');if(_t&&_t!=='system')document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
+<script>try{var _t=localStorage.getItem('iqm_theme');document.documentElement.setAttribute('data-theme',_t==='light'?'light':'dark');}catch(e){}</script>
 <header>
   <div class="bar">
     <a class="brand" href="index.html">
@@ -132,7 +132,6 @@
       IQ Market
     </a>
     <span class="spacer"></span>
-    <button class="hbtn" id="themeBtn" title="Тема">🌓</button>
     <button class="hbtn cart-btn" id="newsBtn" title="Известия и анкети">🔔<span class="badge" id="newsBadge" hidden>0</span></button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn cart-btn" id="cartBtn">🛒 Кошница
@@ -387,7 +386,7 @@ async function refreshUser(){
     if(PROFILE.zone){try{const {data:z}=await sb.from('delivery_zones').select('min_order,delivery_fee,free_over').eq('name',PROFILE.zone).maybeSingle();if(z)ZONE={min_order:+z.min_order||0,delivery_fee:+z.delivery_fee||0,free_over:+z.free_over||0};}catch(e){}}
     try{const {data:q}=await sb.from('quick_order_items').select('product_id').eq('client_id',USER.id);FAVS=new Set((q||[]).map(r=>r.product_id));}catch(e){}
   } else { ZONE={min_order:0,delivery_fee:0,free_over:0}; FAVS=new Set(); }
-  $('accountBtn').textContent= PROFILE? (PROFILE.name?.split(' ')[0]||'Профил') : 'Вход';
+  $('accountBtn').textContent= PROFILE? 'Профил' : 'Вход';
   if(USER) watchOrders();
   renderCats(); renderGrid(); renderDeliverBar();
 }
@@ -475,6 +474,11 @@ function accountModal(){
     <label>Име</label><input id="acName" value="${escapeHtml(PROFILE.name||'')}">
     <label>Адрес за доставка</label><textarea id="acAddr" rows="2">${escapeHtml(PROFILE.address||'')}</textarea>
     <button class="big" id="acSave" style="margin-top:8px">Запази промените</button>
+    <label>Тема на сайта</label>
+    <div class="paysel">
+      <button type="button" class="payopt ${getTheme()==='light'?'active':''}" data-theme-opt="light">☀️ Светла</button>
+      <button type="button" class="payopt ${getTheme()==='dark'?'active':''}" data-theme-opt="dark">🌙 Тъмна</button>
+    </div>
     <div class="info" style="margin-top:16px">🎁 <strong>Покани приятел</strong><br>
       Твоят код: <strong style="font-size:1.1rem;letter-spacing:1px">${escapeHtml(PROFILE.referral_code||'')}</strong>
       <button class="hbtn" id="acCopy" style="margin-left:8px;padding:4px 10px">Копирай</button><br>
@@ -484,7 +488,8 @@ function accountModal(){
     <button class="big" id="acOrders" style="background:var(--surface);color:var(--ink);border:1px solid var(--line)">📦 Моите поръчки</button>
     <button class="big" id="acLogout" style="background:transparent;color:var(--danger);border:1px solid var(--danger)">Изход</button>
   `);
-  $('acSave').onclick=async()=>{const n=$('acName').value.trim(),a=$('acAddr').value.trim();try{await sb.from('profiles').update({name:n,address:a}).eq('id',USER.id);PROFILE.name=n;PROFILE.address=a;$('accountBtn').textContent=(n.split(' ')[0]||'Профил');toast('Запазено ✓');}catch(e){toast('Грешка при запис');}};
+  $('acSave').onclick=async()=>{const n=$('acName').value.trim(),a=$('acAddr').value.trim();try{await sb.from('profiles').update({name:n,address:a}).eq('id',USER.id);PROFILE.name=n;PROFILE.address=a;toast('Запазено ✓');}catch(e){toast('Грешка при запис');}};
+  $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeOpt);$('sheet').querySelectorAll('[data-theme-opt]').forEach(x=>x.classList.toggle('active',x===b));});
   $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
   $('acOrders').onclick=ordersModal;
   $('acLogout').onclick=()=>{logout();closeModal();};
@@ -651,7 +656,6 @@ async function orderDetail(id){
 // ---------- events ----------
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();};
 $('cartBtn').onclick=openCart;
-$('themeBtn').onclick=cycleTheme;
 $('newsBtn').onclick=newsModal;
 $('lightbox').onclick=()=>$('lightbox').classList.remove('open');
 $('closeCart').onclick=closeCart;
@@ -721,18 +725,9 @@ async function renderPoll(p){
   el.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{try{await sb.rpc('vote_poll',{p_poll_id:b.dataset.poll,p_option_index:+b.dataset.opt});toast('Благодарим за гласа!');newsModal();}catch(e){toast('Грешка при гласуване');}});
 }
 
-// ---------- тема ----------
-const THEMES=['system','light','dark'];
-const THEME_ICON={system:'🌓',light:'☀️',dark:'🌙'};
-const THEME_LABEL={system:'Системна',light:'Светла',dark:'Тъмна'};
-function getTheme(){try{return localStorage.getItem('iqm_theme')||'system';}catch(e){return 'system';}}
-function applyTheme(m){
-  if(m==='system')document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme',m);
-  const b=$('themeBtn'); if(b)b.textContent=THEME_ICON[m]||'🌓';
-  try{localStorage.setItem('iqm_theme',m);}catch(e){}
-}
-function cycleTheme(){const cur=getTheme();const next=THEMES[(THEMES.indexOf(cur)+1)%THEMES.length];applyTheme(next);toast('Тема: '+THEME_LABEL[next]);}
+// ---------- тема (само светла/тъмна; тъмна по подразбиране) ----------
+function getTheme(){try{const t=localStorage.getItem('iqm_theme');return t==='light'?'light':'dark';}catch(e){return 'dark';}}
+function applyTheme(m){m=(m==='light')?'light':'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}}
 
 // ---------- init ----------
 applyTheme(getTheme());
