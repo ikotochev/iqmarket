@@ -1,0 +1,111 @@
+<title>Политика за поверителност — IQ Market</title>
+<style>
+  :root{
+    --bg:#F5F7F1;--surface:#FFFFFF;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
+    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--maxw:760px;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0D130F;--surface:#141C16;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}}
+  :root[data-theme="dark"]{
+    --bg:#0D130F;--surface:#141C16;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+    font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:48px 22px 80px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:1.15rem;margin-bottom:8px}
+  .mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(160deg,var(--brand),var(--brand-deep));
+    display:grid;place-items:center}
+  .mark svg{width:21px;height:21px}
+  h1{font-size:2rem;line-height:1.15;letter-spacing:-.02em;margin:14px 0 4px}
+  .updated{color:var(--ink-faint);font-size:.92rem;margin-bottom:8px}
+  h2{font-size:1.25rem;letter-spacing:-.01em;margin:36px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  p,li{color:var(--ink-soft)}
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+  ul{padding-left:1.2em}
+  li{margin:6px 0}
+  .note{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:18px 0;font-size:.95rem}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.95rem}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--ink);font-weight:700}
+  strong{color:var(--ink)}
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:.9rem}
+  footer a{margin-right:14px}
+</style>
+
+<div class="wrap">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 10.5a1.5 1.5 0 0 0 1.5 1.3h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7"/><circle cx="10" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/></svg></span>
+    IQ Market
+  </div>
+  <h1>Политика за поверителност</h1>
+  <p class="updated">В сила от: 5 септември 2026 г.</p>
+
+  <p>Тази Политика за поверителност обяснява как мобилното приложение и услугата <strong>IQ Market</strong> (пакет <code>com.ivan.dostavka</code>) („ние", „нас", „нашата услуга") събира, използва и защитава личните данни на потребителите при онлайн поръчка и доставка на хранителни и битови стоки в Ямбол и региона.</p>
+
+  <div class="note">
+    <strong>Администратор на лични данни:</strong><br>
+    IQ Market ЕООД (в процес на регистрация — фирменото наименование и ЕИК се добавят при вписване на дружеството)<br>
+    Ямбол, България · Имейл: <a href="mailto:ikotochev@gmail.com">ikotochev@gmail.com</a> · Телефон: <a href="tel:0896277066">0896 277 066</a>
+  </div>
+
+  <h2>1. Какви данни събираме</h2>
+  <table>
+    <tr><th>Категория</th><th>Данни</th></tr>
+    <tr><td>Акаунт и идентификация</td><td>Име, телефонен номер (основен идентификатор за вход), парола (съхранявана в криптиран/хеширан вид), реферален код. Не изискваме и не съхраняваме реален имейл адрес за вход в приложението.</td></tr>
+    <tr><td>Доставка</td><td>Адрес за доставка (свободен текст) и населено място/зона. Не събираме точната GPS геолокация на клиента.</td></tr>
+    <tr><td>Поръчки и плащане</td><td>Поръчани продукти, количества, история на поръчките, суми и избран начин на плащане. При плащане с карта данните на картата се въвеждат директно в <strong>Stripe</strong> и не се съхраняват на нашите сървъри.</td></tr>
+    <tr><td>Локация на куриера</td><td>По време на активна доставка куриерът споделя своята GPS локация, за да виждате приближаването на поръчката. Това е локацията на куриера, не на клиента.</td></tr>
+    <tr><td>Известия</td><td>Идентификатор на устройството за push известия (token чрез Firebase Cloud Messaging).</td></tr>
+    <tr><td>Проверка на телефон</td><td>При активирана верификация може да изпратим SMS код чрез Twilio за потвърждаване на номера.</td></tr>
+    <tr><td>Аналитични данни</td><td>Търсения в приложението, разгледани продукти и час на последна активност — за подобряване на услугата.</td></tr>
+    <tr><td>Снимки</td><td>Само ако доброволно качите снимка (по избор).</td></tr>
+  </table>
+  <p>При регистрация приложението може да предложи номера на SIM картата ви (Google Phone Number Hint) — само след ваше действие; не четем списъка ви с контакти.</p>
+
+  <h2>2. За какво използваме данните и на какво основание</h2>
+  <ul>
+    <li><strong>Изпълнение на договор</strong> — за да приемем, обработим, таксуваме и доставим поръчката ви и да поддържаме акаунта и историята ви.</li>
+    <li><strong>Легитимен интерес</strong> — за известия за статуса на поръчката, поддръжка, сигурност и подобряване на услугата.</li>
+    <li><strong>Законово задължение</strong> — за счетоводни и данъчни цели.</li>
+    <li><strong>Съгласие</strong> — за незадължителни функции (напр. качване на снимка, маркетингови известия), което можете да оттеглите по всяко време.</li>
+  </ul>
+
+  <h2>3. С кого споделяме данни</h2>
+  <p>Не продаваме личните ви данни. Споделяме ги само доколкото е необходимо за работата на услугата:</p>
+  <ul>
+    <li><strong>Куриер</strong> — име, адрес и телефон, за да достави поръчката.</li>
+    <li><strong>Supabase</strong> — съхранение на данни и бекенд (сървъри в Европейския съюз).</li>
+    <li><strong>Google Firebase Cloud Messaging / Google Play услуги</strong> — доставка на push известия.</li>
+    <li><strong>Stripe Payments Europe</strong> — обработка на картови плащания (самостоятелен администратор за платежните данни).</li>
+    <li><strong>Twilio</strong> — изпращане на SMS кодове за верификация (когато е активна).</li>
+    <li><strong>Компетентни органи</strong> — при законово изискване.</li>
+  </ul>
+
+  <h2>4. Съхранение и защита</h2>
+  <p>Пазим данните ви, докато имате активен акаунт и след това толкова, колкото изискват законовите задължения (напр. счетоводни и данъчни документи за поръчките се пазят съгласно Закона за счетоводството и данъчното законодателство). Прилагаме разумни технически и организационни мерки (криптиране на паролите, контрол на достъпа) срещу неоторизиран достъп.</p>
+
+  <h2>5. Вашите права</h2>
+  <p>Съгласно Общия регламент за защита на данните (GDPR) имате право на: достъп; коригиране; изтриване („правото да бъдеш забравен"); ограничаване на обработването; възражение; преносимост на данните; както и да оттеглите съгласието си.</p>
+  <p>За да упражните тези права, пишете на <a href="mailto:ikotochev@gmail.com">ikotochev@gmail.com</a> или се обадете на <a href="tel:0896277066">0896 277 066</a>. Имате право и на жалба до <strong>Комисията за защита на личните данни (КЗЛД)</strong>, гр. София — <a href="https://www.cpdp.bg">www.cpdp.bg</a>.</p>
+
+  <h2>6. Изтриване на акаунт и данни</h2>
+  <p>Можете да поискате изтриване на акаунта и свързаните с него лични данни по всяко време — чрез имейл на <a href="mailto:ikotochev@gmail.com">ikotochev@gmail.com</a> или обаждане на <a href="tel:0896277066">0896 277 066</a>. Изпълняваме искането в разумен срок, като запазваме само данните, които сме длъжни да пазим по закон (напр. счетоводни документи за издадени поръчки).</p>
+
+  <h2>7. Деца</h2>
+  <p>Услугата не е предназначена за лица под 18 години и не събираме съзнателно данни от деца.</p>
+
+  <h2>8. Промени в политиката</h2>
+  <p>Можем да актуализираме тази политика. Актуалната версия винаги е достъпна на тази страница с посочена дата на влизане в сила.</p>
+
+  <h2>9. Контакт</h2>
+  <p>Въпроси относно поверителността: <a href="mailto:ikotochev@gmail.com">ikotochev@gmail.com</a> · <a href="tel:0896277066">0896 277 066</a> · Ямбол, България.</p>
+
+  <footer>
+    <a href="index.html">Начало</a><a href="terms.html">Общи условия</a><br>
+    © 2026 IQ Market · Ямбол. Всички права запазени.
+  </footer>
+</div>
