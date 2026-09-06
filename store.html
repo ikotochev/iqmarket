@@ -57,7 +57,16 @@
   }
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
   @media(max-width:760px){
-    .grid{grid-template-columns:repeat(3,1fr);gap:9px}
+    .grid{grid-template-columns:repeat(3,1fr);gap:8px}
+    .card .img{aspect-ratio:4/3}
+    .card .body{padding:7px 8px 9px;gap:4px}
+    .card .name{font-size:.78rem;min-height:2.4em;line-height:1.2}
+    .card .brand-s{font-size:.68rem}
+    .price{font-size:.9rem}
+    .add{font-size:.76rem;padding:7px}
+    .stepper button{width:28px;height:30px;font-size:1.05rem}
+    .stepper .q{font-size:.8rem}
+    .fav{width:26px;height:26px;font-size:.9rem}
   }
   @media(max-width:420px){
     .grid{grid-template-columns:repeat(2,1fr)}
