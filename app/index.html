@@ -32,6 +32,20 @@
 
   <title>IQ Market</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Еднократно махане на стар service worker + кеш (беше причина за бял екран) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        for (var i = 0; i < rs.length; i++) rs[i].unregister();
+      }).catch(function () {});
+      if (window.caches && caches.keys) {
+        caches.keys().then(function (ks) {
+          for (var i = 0; i < ks.length; i++) caches.delete(ks[i]);
+        }).catch(function () {});
+      }
+    }
+  </script>
 </head>
 <body>
   <!--
