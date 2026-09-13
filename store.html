@@ -695,6 +695,7 @@ async function placeOrder(){
         if(it){delete CART[id];saveCart();renderGrid();renderCart();m=`„${it.product.name}" вече не се предлага и е премахнат от кошницата. Провери поръчката и опитай пак.`;}
         else m='Продукт от кошницата вече не се предлага. Отвори кошницата и опитай пак.';
       }
+      else if(m.includes('не доставяме до')) m='В момента не доставяме до твоето населено място. За въпроси: 0896 277 066.';
       else if(m.includes('под минимума')) m='Поръчката е под минимума за твоята зона.';
       err.textContent=m; $('coGo').disabled=false; $('coGo').textContent=lbl; return;
     }
