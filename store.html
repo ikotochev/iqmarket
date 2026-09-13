@@ -206,7 +206,7 @@ const stripe = (typeof Stripe!=='undefined')? Stripe(STRIPE_PK): null;
 let PM='cash';
 
 const CAT_EMOJI={'Всички':'🛒','Консерви':'🥫','Хранителни':'🍝','За дома':'🧽','Захарни':'🍬','Напитки':'🥤','Млечни':'🥛','Олио и подправки':'🫒','Месо':'🥩','Хляб и сладкиши':'🍫','Замразени':'❄️','Козметика':'🧴','Плодове и зеленчуци':'🥦','Суха храна':'🌾','Зеленчуци':'🥕','Плодове':'🍎'};
-const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override';
+const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override, warehouses(name, working_hours)';
 
 const FAV_CAT='★ Моят магазин';
 let PRODUCTS=[], CATS=['Всички'], HIDDEN=[], CAT='Всички', SEARCH='';
@@ -226,6 +226,45 @@ function stars(r){r=Number(r)||0;let h='';for(let i=1;i<=5;i++)h+=`<span style="
 function loadCart(){try{return JSON.parse(localStorage.getItem('iqm_cart')||'{}');}catch(e){return {};}}
 function saveCart(){localStorage.setItem('iqm_cart', JSON.stringify(CART));renderCartBadge();}
 
+// ---------- работно време и желан час (като lib/utils/working_hours.dart в приложението) ----------
+const DELIVERY_START_MIN=9*60;
+const WD=['','Пон','Вт','Ср','Чет','Пет','Съб','Нед'];
+const pad2=n=>String(n).padStart(2,'0');
+const wdKey=d=>String(d.getDay()===0?7:d.getDay());           // 1=пон … 7=нед
+const toMin=t=>{const[a,b]=t.split(':');return (+a)*60+(+b);};
+function isOpenAt(h,t){
+  if(!h||!Object.keys(h).length)return true;                   // без работно време = винаги отворен
+  const d=h[wdKey(t)]; if(!d||!d.open||!d.close)return false;
+  const cur=t.getHours()*60+t.getMinutes(); return cur>=toMin(d.open)&&cur<toMin(d.close);
+}
+function nextOpening(h,from){
+  if(isOpenAt(h,from))return from;
+  for(let i=0;i<=7;i++){
+    const day=new Date(from.getFullYear(),from.getMonth(),from.getDate()+i);
+    const d=h[wdKey(day)]; if(!d||!d.open)continue;
+    const m=toMin(d.open); const at=new Date(day.getFullYear(),day.getMonth(),day.getDate(),Math.floor(m/60),m%60);
+    if(at>=from)return at;
+  }
+  return null;                                                   // склад без нито един работен ден
+}
+function earliestDelivery(hoursList,now){
+  let e=now;
+  for(const h of hoursList){const o=nextOpening(h,now); if(!o)return null; if(o>e)e=o;}
+  const start=new Date(e.getFullYear(),e.getMonth(),e.getDate(),Math.floor(DELIVERY_START_MIN/60),DELIVERY_START_MIN%60);
+  return e<start?start:e;
+}
+function dayLabel(d){
+  const n=new Date(); const diff=Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()))/864e5);
+  if(diff===0)return 'днес'; if(diff===1)return 'утре';
+  return `${WD[d.getDay()===0?7:d.getDay()]} ${pad2(d.getDate())}.${pad2(d.getMonth()+1)}`;
+}
+const dtLabel=d=>`${dayLabel(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const encodeDT=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+function formatDT(raw){                                         // „2026-09-14 10:30" → „утре 10:30"; старите „18:00" както са
+  if(!raw)return null; const m=/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(raw); if(!m)return raw;
+  return dtLabel(new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]));
+}
+
 // ---------- каталог ----------
 async function loadCatalog(){
   try{
@@ -234,7 +273,7 @@ async function loadCatalog(){
   }catch(e){}
   const all=[]; let from=0;
   while(true){
-    const {data,error}=await sb.from('products').select(CATALOG_COLS).eq('is_active',true).order('name').range(from,from+999);
+    const {data,error}=await sb.from('products').select(CATALOG_COLS).eq('is_active',true).order('name').order('id').range(from,from+999); // id → страниците не се застъпват
     if(error){$('status').textContent='Грешка при зареждане: '+error.message;return;}
     all.push(...data); if(data.length<1000)break; from+=1000;
   }
@@ -473,15 +512,19 @@ async function doReg(){
   if(pass.length<6){err.textContent='Паролата трябва да е поне 6 символа';return;}
   $('doReg').disabled=true;
   try{
-    const {data:ex}=await sb.from('profiles').select('id').eq('phone',phone).maybeSingle();
+    // RPC-то работи и без вход (директна заявка към profiles преди вход винаги е празна)
+    const {data:ex}=await sb.rpc('get_id_by_phone',{phone_number:phone});
     if(ex){err.textContent='Този телефон вече е регистриран';$('doReg').disabled=false;return;}
     const uuid=crypto.randomUUID(); const email=uuid+'@dostavka.app';
     const {data:su,error:e1}=await sb.auth.signUp({email,password:pass});
     if(e1||!su.user){err.textContent='Регистрацията не успя: '+(e1?.message||'');$('doReg').disabled=false;return;}
-    let referredBy=null;
-    if(ref){const {data:r}=await sb.from('profiles').select('id').eq('referral_code',ref).maybeSingle();if(r)referredBy=ref;}
-    const {error:e2}=await sb.from('profiles').insert({id:su.user.id,name,phone,role:'client',address:addr+', '+zone,zone,referral_code:genCode(),referred_by:referredBy,referral_discount:0});
-    if(e2){err.textContent='Профилът не се създаде: '+e2.message;$('doReg').disabled=false;return;}
+    // Рефералният код се проверява в базата (тригер) — невалиден/собствен се игнорира
+    const {error:e2}=await sb.from('profiles').insert({id:su.user.id,name,phone,role:'client',address:addr+', '+zone,zone,referral_code:genCode(),referred_by:ref||null,referral_discount:0});
+    if(e2){
+      await sb.auth.signOut();                                   // без профил акаунтът е неизползваем
+      err.textContent=/phone/.test(e2.message)?'Този телефон вече е регистриран':'Профилът не се създаде: '+e2.message;
+      $('doReg').disabled=false;return;
+    }
     await refreshUser(); closeModal(); toast('Акаунтът е създаден!');
   }catch(e){err.textContent='Грешка: '+e.message;$('doReg').disabled=false;}
 }
@@ -509,12 +552,20 @@ function accountModal(){
     </div>
     <button class="big" id="acOrders" style="background:var(--surface);color:var(--ink);border:1px solid var(--line)">📦 Моите поръчки</button>
     <button class="big" id="acLogout" style="background:transparent;color:var(--danger);border:1px solid var(--danger)">Изход</button>
+    <button class="hbtn" id="acDelete" style="display:block;margin:14px auto 0;background:transparent;border:none;color:var(--ink-faint);font-size:.85rem">Изтрий акаунта ми</button>
   `);
   $('acSave').onclick=async()=>{const n=$('acName').value.trim(),a=$('acAddr').value.trim();try{await sb.from('profiles').update({name:n,address:a}).eq('id',USER.id);PROFILE.name=n;PROFILE.address=a;toast('Запазено ✓');}catch(e){toast('Грешка при запис');}};
   $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeOpt);$('sheet').querySelectorAll('[data-theme-opt]').forEach(x=>x.classList.toggle('active',x===b));});
   $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
   $('acOrders').onclick=ordersModal;
   $('acLogout').onclick=()=>{logout();closeModal();};
+  $('acDelete').onclick=async()=>{
+    if(!confirm('Акаунтът ти ще бъде изтрит завинаги: име, телефон, адреси и безплатните доставки.\n\nИсторията на поръчките се пази анонимно (без твоите данни) заради счетоводството.\n\nПродължаваш ли?'))return;
+    const {error}=await sb.rpc('delete_my_account');
+    if(error){toast(/в процес/.test(error.message)?'Имаш поръчка в процес — изтрий акаунта след доставката':'Неуспешно — опитай пак');return;}
+    try{await sb.auth.signOut();}catch(e){}
+    CART={}; saveCart(); await refreshUser(); closeModal(); toast('Акаунтът е изтрит');
+  };
 }
 
 // ---------- поръчка ----------
@@ -527,12 +578,37 @@ async function checkout(){
   const belowMin = minOrder>0 && sub<minOrder;
   const weighted=cartArr().some(i=>i.product.is_weighted);
   const finalTot = sub + fee;
+  // Живо работно време на складовете от количката
+  const whIds=[...new Set(cartArr().map(i=>i.product.warehouse_id))];
+  let whRows=[]; try{const {data}=await sb.from('warehouses').select('id,name,working_hours').in('id',whIds); whRows=data||[];}catch(e){}
+  const now=new Date();
+  const closed=whRows.filter(w=>!isOpenAt(w.working_hours,now)).map(w=>w.name);
+  const earliest=earliestDelivery(whRows.map(w=>w.working_hours),now);
+  CO_EARLIEST=earliest; CO_CLOSED=closed;
+  // Слотове по час за 3 дни от най-ранния възможен; стойност С ДАТА („2026-09-14 10:00")
   let slots='<option value="">При първа възможност</option>';
-  for(let h=9;h<=19;h++){slots+=`<option value="${String(h).padStart(2,'0')}:00">${String(h).padStart(2,'0')}:00 – ${String(h+1).padStart(2,'0')}:00</option>`;}
+  if(earliest){
+    for(let dd=0;dd<3;dd++){
+      const day=new Date(earliest.getFullYear(),earliest.getMonth(),earliest.getDate()+dd);
+      const opts=[];
+      for(let h=9;h<=19;h++){
+        const t=new Date(day.getFullYear(),day.getMonth(),day.getDate(),h,0);
+        if(t<earliest)continue;
+        opts.push(`<option value="${encodeDT(t)}">${pad2(h)}:00 – ${pad2(h+1)}:00</option>`);
+      }
+      if(opts.length)slots+=`<optgroup label="${dayLabel(day)}">${opts.join('')}</optgroup>`;
+    }
+  }
+  // Запазени адреси („Моите адреси" от приложението)
+  let saved=[]; try{const {data}=await sb.from('client_addresses').select('label,address,is_default').eq('user_id',USER.id).order('is_default',{ascending:false}).order('created_at'); saved=data||[];}catch(e){}
+  const savedSel=saved.length>1?`<select id="coSaved" style="margin-bottom:6px">${saved.map(a=>`<option value="${escapeHtml(a.address)}">${escapeHtml(a.label)} — ${escapeHtml(a.address)}</option>`).join('')}</select>`:'';
   openModal(`
     <h2>Потвърди поръчката</h2>
+    ${!earliest&&whRows.length?`<div class="err">Склад от количката в момента не приема поръчки.</div>`:''}
+    ${closed.length&&earliest?`<div class="info">🕒 В момента е затворен: ${escapeHtml(closed.join(', '))}. Можеш да поръчаш сега — най-ранна доставка <strong>${dtLabel(earliest)}</strong>.</div>`:''}
     <label>Адрес за доставка</label>
-    <textarea id="coAddr" rows="2">${escapeHtml(PROFILE.address||'')}</textarea>
+    ${savedSel}
+    <textarea id="coAddr" rows="2">${escapeHtml((saved[0]&&saved[0].address)||PROFILE.address||'')}</textarea>
     <label>Желан час за доставка</label>
     <select id="coTime">${slots}</select>
     <label>Начин на плащане</label>
@@ -549,16 +625,23 @@ async function checkout(){
     <button class="big" id="coGo" ${belowMin?'disabled':''}>Поръчай сега</button>
   `);
   $('coGo').onclick=placeOrder;
+  if($('coSaved'))$('coSaved').onchange=e=>{$('coAddr').value=e.target.value;};
   $('sheet').querySelectorAll('.payopt').forEach(b=>b.onclick=()=>{
     PM=b.dataset.pm;
     $('sheet').querySelectorAll('.payopt').forEach(x=>x.classList.toggle('active',x===b));
     $('coGo').textContent = PM==='card'?'Плати с карта':'Поръчай сега';
   });
 }
+let CO_EARLIEST=null, CO_CLOSED=[];
 async function placeOrder(){
   const err=$('coErr'); err.textContent='';
   const addr=$('coAddr').value.trim();
   if(!addr){err.textContent='Въведи адрес';return;}
+  if(!CO_EARLIEST){err.textContent='Склад от количката в момента не приема поръчки.';return;}
+  const pick=$('coTime')?.value||'';
+  if(pick){const m=/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(pick); const t=m&&new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]);
+    if(t && t<new Date(Math.max(CO_EARLIEST,new Date())-60000)){err.textContent='Този час вече мина — избери по-късен.';return;}}
+  if(CO_CLOSED.length && !confirm(`В момента е затворен: ${CO_CLOSED.join(', ')}.\nДоставяме, когато складът отвори — най-рано ${dtLabel(CO_EARLIEST)}.\n\nДа продължа ли?`))return;
   if(PM==='card' && !stripe){err.textContent='Плащането с карта не е достъпно в момента.';return;}
   const lbl = PM==='card'?'Плати с карта':'Поръчай сега';
   $('coGo').disabled=true; $('coGo').textContent='Момент…';
@@ -667,7 +750,7 @@ async function orderDetail(id){
     <h2 style="margin:2px 0 8px">Поръчка #${String(id).slice(0,8)}</h2>
     <div style="text-align:center;margin:10px 0"><span class="stbadge" style="background:${c};font-size:1rem;padding:8px 18px">${t}</span></div>
     ${o.status==='on_the_way'?'<div class="info">🚴 Доставчикът е на път към теб!</div>':''}
-    <div class="info">📍 ${escapeHtml(o.client_address||'')}</div>
+    <div class="info">📍 ${escapeHtml(o.client_address||'')}${o.delivery_time?`<br>🕒 Желан час: ${escapeHtml(formatDT(o.delivery_time))}`:''}<br>${o.payment_method==='card'?'💳 Плащане с карта':'💵 Плащане при доставка'}</div>
     <div style="margin:14px 0 6px;font-weight:700">Артикули</div>
     ${its||'<div class="muted">—</div>'}
     <div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
