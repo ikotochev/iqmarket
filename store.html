@@ -480,23 +480,24 @@ function authModal(tab='login'){
   $('tL').onclick=()=>authModal('login'); $('tR').onclick=()=>authModal('reg');
   $('authBody').innerHTML = tab==='login'? loginForm(): regForm();
   if(tab==='login'){
-    $('doLogin').onclick=doLogin;
+    $('loginF').onsubmit=e=>{e.preventDefault();doLogin();};
+    $('forgotLink').onclick=e=>{e.preventDefault();forgotModal(clean($('lPhone').value));};
   }else{
     loadZones(); $('doReg').onclick=doReg;
   }
 }
-function loginForm(){return `
-  <label>Телефон</label><input id="lPhone" type="tel" placeholder="0888123456">
-  <label>Парола</label><input id="lPass" type="password">
+function loginForm(){return `<form id="loginF" autocomplete="on">
+  <label>Телефон</label><input id="lPhone" name="username" type="tel" autocomplete="username" placeholder="0888123456">
+  <label>Парола</label><input id="lPass" name="password" type="password" autocomplete="current-password">
   <div class="err" id="authErr"></div>
-  <button class="big" id="doLogin">Влез</button>
-  <p class="muted" style="text-align:center;font-size:.85rem;margin-top:10px">Забравена парола? Обади се на <a href="tel:0896277066">0896 277 066</a> — ще ти зададем нова.</p>`;}
+  <button class="big" id="doLogin" type="submit">Влез</button>
+  <p style="text-align:center;font-size:.9rem;margin-top:10px"><a href="#" id="forgotLink">Забравена парола?</a></p></form>`;}
 function regForm(){return `
   <label>Име</label><input id="rName" placeholder="Три имена">
-  <label>Телефон</label><input id="rPhone" type="tel" placeholder="0888123456">
+  <label>Телефон</label><input id="rPhone" type="tel" autocomplete="username" placeholder="0888123456">
   <label>Населено място</label><select id="rZone"><option value="">Зареждане…</option></select>
   <label>Адрес за доставка</label><input id="rAddr" placeholder="кв., бл., вх., ет., ап.">
-  <label>Парола (мин. 6)</label><input id="rPass" type="password">
+  <label>Парола (мин. 6)</label><input id="rPass" type="password" autocomplete="new-password">
   <label>Код за покана (по избор)</label><input id="rRef" placeholder="">
   <div class="err" id="authErr"></div>
   <button class="big" id="doReg">Създай акаунт</button>`;}
@@ -544,6 +545,61 @@ async function doReg(){
     await refreshUser(); closeModal(); toast('Акаунтът е създаден!');
   }catch(e){err.textContent='Грешка: '+e.message;$('doReg').disabled=false;}
 }
+function forgotModal(phone0){
+  openModal(`<h2>Забравена парола</h2>
+    <p class="muted" id="fpInfo" style="font-size:.9rem;margin:4px 0 0">Въведи телефона, с който си регистриран. Ще получиш SMS с код.</p>
+    <form id="fpF" autocomplete="on">
+      <label>Телефон</label><input id="fpPhone" name="username" type="tel" autocomplete="username" value="${escapeHtml(phone0||'')}" placeholder="0888123456">
+      <div id="fpStep2" hidden>
+        <label>Код от SMS</label><input id="fpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <label>Нова парола (мин. 6)</label><input id="fpPass" type="password" autocomplete="new-password">
+        <label>Повтори новата</label><input id="fpPass2" type="password" autocomplete="new-password">
+      </div>
+      <div class="err" id="fpErr"></div>
+      <button class="big" id="fpGo" type="submit">Изпрати код</button>
+    </form>
+    <p style="text-align:center;font-size:.85rem;margin-top:8px"><a href="#" id="fpResend" hidden>Изпрати нов код</a></p>
+    <p class="muted" style="text-align:center;font-size:.85rem">Не получаваш SMS? Обади се на <a href="tel:0896277066">0896 277 066</a></p>
+    <button class="big" id="fpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад към вход</button>`);
+  let sent=false, phone='';
+  const friendly=m=>/not registered|не е регистриран|Signups not allowed/.test(m)?'Няма акаунт с този телефон.'
+    :/rate|seconds|too many/i.test(m)?'Твърде много опити. Изчакай минута и опитай пак.'
+    :/expired|invalid/i.test(m)?'Грешен или изтекъл код. Провери SMS-а или поискай нов код.'
+    :/sms|provider/i.test(m)?'Не успяхме да изпратим SMS. Опитай пак след малко или се обади на 0896 277 066.'
+    :'Нещо се обърка. Опитай пак или се обади на 0896 277 066.';
+  async function send(){
+    const e=$('fpErr'); e.textContent=''; phone=clean($('fpPhone').value);
+    if(phone.length!==10){e.textContent='Телефонът трябва да е 10 цифри';return;}
+    $('fpGo').disabled=true;
+    try{
+      const {data:uid}=await sb.rpc('get_id_by_phone',{phone_number:phone});
+      if(!uid){e.textContent='Няма акаунт с този телефон.';return;}
+      const {error}=await sb.auth.signInWithOtp({phone:'+359'+phone.slice(1),options:{shouldCreateUser:false}});
+      if(error){e.textContent=friendly(error.message||'');return;}
+      sent=true; $('fpStep2').hidden=false; $('fpPhone').disabled=true; $('fpResend').hidden=false;
+      $('fpInfo').textContent='Изпратихме SMS с 6-цифрен код на '+phone+'. Въведи го и избери нова парола.';
+      $('fpGo').textContent='Смени паролата'; $('fpCode').focus();
+    }finally{ $('fpGo').disabled=false; }
+  }
+  async function reset(){
+    const e=$('fpErr'); e.textContent='';
+    const code=$('fpCode').value.trim(), p1=$('fpPass').value, p2=$('fpPass2').value;
+    if(code.length<6){e.textContent='Въведи 6-цифрения код от SMS';return;}
+    if(p1.length<6){e.textContent='Новата парола трябва да е поне 6 символа';return;}
+    if(p1!==p2){e.textContent='Паролите не съвпадат';return;}
+    $('fpGo').disabled=true;
+    try{
+      const {error:ve}=await sb.auth.verifyOtp({phone:'+359'+phone.slice(1),token:code,type:'sms'});
+      if(ve){e.textContent=friendly(ve.message||'');return;}
+      const {error:ue}=await sb.auth.updateUser({password:p1});
+      if(ue && !/different from the old/.test(ue.message||'')){e.textContent=friendly(ue.message||'');return;}
+      await refreshUser(); closeModal(); toast('Паролата е сменена ✓ Влезе в профила си.');
+    }finally{ $('fpGo').disabled=false; }
+  }
+  $('fpF').onsubmit=ev=>{ev.preventDefault(); sent?reset():send();};
+  $('fpResend').onclick=ev=>{ev.preventDefault(); sent=false; send();};
+  $('fpBack').onclick=()=>authModal('login');
+}
 async function logout(){if(ordersChan){try{sb.removeChannel(ordersChan);}catch(e){}ordersChan=null;}await sb.auth.signOut();await refreshUser();toast('Излязохте');}
 function accountModal(){
   if(!PROFILE){authModal('login');return;}
@@ -578,9 +634,9 @@ function accountModal(){
   $('acLogout').onclick=()=>{logout();closeModal();};
   $('acPass').onclick=()=>{
     openModal(`<h2>Смени паролата</h2>
-      <label>Текуща парола</label><input id="cpOld" type="password">
-      <label>Нова парола (мин. 6)</label><input id="cpNew" type="password">
-      <label>Повтори новата</label><input id="cpNew2" type="password">
+      <label>Текуща парола</label><input id="cpOld" type="password" autocomplete="current-password">
+      <label>Нова парола (мин. 6)</label><input id="cpNew" type="password" autocomplete="new-password">
+      <label>Повтори новата</label><input id="cpNew2" type="password" autocomplete="new-password">
       <div class="err" id="cpErr"></div>
       <button class="big" id="cpGo">Запази</button>
       <button class="big" id="cpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад</button>`);
