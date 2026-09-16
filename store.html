@@ -761,12 +761,12 @@ async function placeOrder(){
 }
 async function orderSuccess(orderId){
   CART={}; saveCart(); renderGrid(); closeCart();
-  let total=null;
-  try{const {data:o}=await sb.from('orders').select('total').eq('id',orderId).maybeSingle();if(o)total=o.total;}catch(e){}
+  let total=null, orderNo=null;
+  try{const {data:o}=await sb.from('orders').select('total,order_no').eq('id',orderId).maybeSingle();if(o){total=o.total;orderNo=o.order_no;}}catch(e){}
   openModal(`<div class="ok-box">
       <div class="big-check">✅</div>
       <h2>Поръчката е приета!</h2>
-      <p class="muted">Номер: #${String(orderId).slice(0,8)}</p>
+      <p class="muted">Номер: #${orderNo??String(orderId).slice(0,8)}</p>
       ${total!=null?`<p><strong>Общо: ${money(total)}</strong></p>`:''}
       <p class="muted">Складът вече я вижда. Ще доставим възможно най-скоро.</p>
       <button class="big" id="okOrders">Проследи поръчката</button>
@@ -825,12 +825,12 @@ async function ordersModal(){
 }
 async function renderOrders(){
   const box=$('ordList'); if(!box)return;
-  const {data,error}=await sb.from('orders').select('id,status,total,client_address,created_at,payment_status').eq('client_id',USER.id).order('created_at',{ascending:false}).limit(40);
+  const {data,error}=await sb.from('orders').select('id,order_no,status,total,client_address,created_at,payment_status').eq('client_id',USER.id).order('created_at',{ascending:false}).limit(40);
   if(error){box.innerHTML='<div class="center">Грешка при зареждане</div>';return;}
   const list=(data||[]).filter(o=>!HIDDEN_PAY.includes(o.payment_status));
   if(!list.length){box.innerHTML='<div class="center">Нямаш поръчки още</div>';return;}
   box.innerHTML=list.map(o=>{const[t,c]=stInfo(o.status);return `<button class="ordrow" data-o="${o.id}">
-    <div><div style="font-weight:700">Поръчка #${String(o.id).slice(0,8)}</div><div class="muted" style="font-size:.8rem">${fmtDate(o.created_at)} · ${money(o.total)}</div></div>
+    <div><div style="font-weight:700">Поръчка #${o.order_no??String(o.id).slice(0,8)}</div><div class="muted" style="font-size:.8rem">${fmtDate(o.created_at)} · ${money(o.total)}</div></div>
     <span class="stbadge" style="background:${c}">${t}</span></button>`;}).join('');
   box.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>orderDetail(b.dataset.o));
 }
@@ -848,7 +848,7 @@ async function orderDetail(id){
     return `<div class="rowb"><span>${escapeHtml(nm)} × ${fmtQty(q)} ${u}${w&&i.actual_qty==null?' (претегля се)':''}</span><span>${money((i.price||0)*q)}</span></div>`;}).join('');
   const b=$('odBody'); if(!b)return;
   b.innerHTML=`
-    <h2 style="margin:2px 0 8px">Поръчка #${String(id).slice(0,8)}</h2>
+    <h2 style="margin:2px 0 8px">Поръчка #${o.order_no??String(id).slice(0,8)}</h2>
     <div style="text-align:center;margin:10px 0"><span class="stbadge" style="background:${c};font-size:1rem;padding:8px 18px">${t}</span></div>
     ${o.status==='on_the_way'?'<div class="info">🚴 Доставчикът е на път към теб!</div>':''}
     <div class="info">📍 ${escapeHtml(o.client_address||'')}${o.delivery_time?`<br>🕒 Желан час: ${escapeHtml(formatDT(o.delivery_time))}`:''}<br>${o.payment_method==='card'?'💳 Плащане с карта':'💵 Плащане при доставка'}</div>
