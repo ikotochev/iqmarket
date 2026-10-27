@@ -50,6 +50,14 @@
   .catlink:hover{background:var(--surface)}
   .catlink.active{background:var(--brand);color:#fff;border-color:var(--brand)}
   .catlink.active .cnt{color:#e6ffee}
+  .catlink.brandtab{background:#7B1E22;color:#F4D98B;border:2px solid #D4A537}
+  .catlink.brandtab .cnt{color:#F4D98B}
+  .catlink.brandtab.active{background:#4A1013;color:#F4D98B;border-color:#D4A537}
+  .brandbanner{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:12px;border-radius:16px;
+    background:linear-gradient(135deg,#7B1E22,#4A1013);border:1.5px solid #D4A537}
+  .brandbanner .bi{font-size:2.3rem}
+  .brandbanner .bn{font-size:1.25rem;font-weight:800;color:#F4D98B}
+  .brandbanner .bt{font-size:.82rem;color:rgba(255,255,255,.75)}
   @media(max-width:760px){
     .layout{grid-template-columns:1fr;gap:8px}
     .side{position:static}
@@ -211,6 +219,17 @@ const stripe = (typeof Stripe!=='undefined')? Stripe(STRIPE_PK): null;
 let PM='cash';
 
 const CAT_EMOJI={'Всички':'🛒','Консерви':'🥫','Хранителни':'🍝','За дома':'🧽','Захарни':'🍬','Напитки':'🥤','Млечни':'🥛','Олио и подправки':'🫒','Месо':'🥩','Хляб и сладкиши':'🍫','Замразени':'❄️','Козметика':'🧴','Плодове и зеленчуци':'🥦','Суха храна':'🌾','Зеленчуци':'🥕','Плодове':'🍎'};
+// Фирмени табове (местни производители): виртуални категории веднага след „Всички"
+const BRAND_TABS={
+  'Бай Течо':{emoji:'🥓',tagline:'Месокомбинат · местен производител на месни продукти',warehouse:'Месокомбинат Бай Течо',brandKey:'течо'},
+  'Мосю Анду':{emoji:'🍖',tagline:'Местен производител на месо и месни продукти',brandKey:'анду'}
+};
+function inCat(p,c){
+  if(c==='Всички') return true;
+  const t=BRAND_TABS[c];
+  if(!t) return p.category===c;
+  return (t.warehouse && p.warehouses && p.warehouses.name===t.warehouse) || (p.brand||'').toLowerCase().includes(t.brandKey);
+}
 const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override, warehouses(name, working_hours)';
 
 const FAV_CAT='★ Моят магазин';
@@ -285,7 +304,7 @@ async function loadCatalog(){
   PRODUCTS=all.filter(p=>!HIDDEN.includes(p.category));
   syncCartWithCatalog();
   const set=[...new Set(PRODUCTS.map(p=>p.category).filter(Boolean))].sort();
-  CATS=['Всички',...set];
+  CATS=['Всички',...Object.keys(BRAND_TABS),...set];
   $('status').style.display='none';
   renderCats(); renderGrid();
 }
@@ -293,20 +312,22 @@ function renderCats(){
   const counts={}; PRODUCTS.forEach(p=>counts[p.category]=(counts[p.category]||0)+1);
   const list = PROFILE? [FAV_CAT,...CATS] : CATS;
   $('cats').innerHTML=list.map(c=>{
-    const n= c===FAV_CAT? FAVS.size : (c==='Всички'?PRODUCTS.length:(counts[c]||0));
-    const emo= c===FAV_CAT? '★' : (CAT_EMOJI[c]||'🏷️');
-    return `<button class="catlink ${c===CAT?'active':''}" data-c="${c}">${emo} <span>${c}</span><span class="cnt">${n}</span></button>`;
+    const n= c===FAV_CAT? FAVS.size : (c==='Всички'?PRODUCTS.length:(BRAND_TABS[c]?PRODUCTS.filter(p=>inCat(p,c)).length:(counts[c]||0)));
+    const emo= c===FAV_CAT? '★' : (BRAND_TABS[c]?BRAND_TABS[c].emoji:(CAT_EMOJI[c]||'🏷️'));
+    return `<button class="catlink ${BRAND_TABS[c]?'brandtab':''} ${c===CAT?'active':''}" data-c="${c}">${emo} <span>${c}</span><span class="cnt">${n}</span></button>`;
   }).join('');
   $('cats').querySelectorAll('.catlink').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;SEARCH='';$('search').value='';renderCats();renderGrid();window.scrollTo({top:0,behavior:'smooth'});});
 }
 function renderGrid(){
   let list=PRODUCTS;
   if(CAT===FAV_CAT) list=list.filter(p=>FAVS.has(p.id));
-  else if(CAT!=='Всички') list=list.filter(p=>p.category===CAT);
+  else if(CAT!=='Всички') list=list.filter(p=>inCat(p,CAT));
   if(SEARCH.trim()){const q=SEARCH.trim().toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q));}
   if(CAT===FAV_CAT && !list.length){$('grid').innerHTML='<div class="center">Твоят магазин е празен.<br>Натисни ♡ на продукт, за да го добавиш тук за бърза поръчка.</div>';return;}
   if(!list.length){$('grid').innerHTML='<div class="center">Няма намерени продукти</div>';return;}
-  $('grid').innerHTML=list.map(p=>{
+  const bt=BRAND_TABS[CAT];
+  const banner= bt&&!SEARCH.trim()? `<div class="brandbanner" style="grid-column:1/-1"><span class="bi">${bt.emoji}</span><div><div class="bn">${CAT}</div><div class="bt">${bt.tagline}</div></div></div>` : '';
+  $('grid').innerHTML=banner+list.map(p=>{
     const inCart=CART[p.id];
     const dp=discounted(p), has=p.discount_percent>0, priced=dp>0;
     const img=p.image_url?`<img src="${escapeHtml(p.image_url)}" loading="lazy" alt="">`:`<span class="ph">🛒</span>`;
