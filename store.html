@@ -196,6 +196,11 @@
 <div class="lightbox" id="lightbox"><img id="lbImg" alt=""></div>
 <div class="toast" id="toast"></div>
 
+<footer style="max-width:var(--maxw);margin:30px auto 20px;padding:0 14px;color:var(--ink-faint);font-size:.82rem;text-align:center">
+  <a href="privacy.html">Поверителност</a> · <a href="terms.html">Общи условия</a> · <a href="otkaz.html">Откажете се от договора тук</a>
+  <div style="margin-top:6px">© 2026 IQ Market · Ямбол</div>
+</footer>
+
 <script>
 const SUPABASE_URL='https://opmnvrwnsqblyrtlogcj.supabase.co';
 const SUPABASE_KEY='sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn';
@@ -856,7 +861,8 @@ async function orderDetail(id){
     ${its||'<div class="muted">—</div>'}
     <div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
     ${pend?'<div class="muted" style="font-size:.8rem;margin-top:6px">⚖️ Част от продуктите се претеглят — крайната цена може леко да варира.</div>':''}
-    <div class="info" style="margin-top:14px">При проблем: <a href="tel:${SUPPORT}">${SUPPORT}</a></div>`;
+    <div class="info" style="margin-top:14px">При проблем: <a href="tel:${SUPPORT}">${SUPPORT}</a></div>
+    <div style="text-align:center;margin-top:10px"><a href="otkaz.html?order=${o.order_no??''}" style="font-size:.85rem">Откажете се от договора тук</a></div>`;
 }
 
 // ---------- events ----------

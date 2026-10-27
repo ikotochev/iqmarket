@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отказ от договора — IQ Market</title>
+<meta name="description" content="Функция за отказ от договора по чл. 52а от Закона за защита на потребителите.">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F5F7F1;--surface:#FFFFFF;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
+    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--danger:#C0392B;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0D130F;--surface:#141C16;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}}
+  :root[data-theme="dark"]{
+    --bg:#0D130F;--surface:#141C16;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  a{color:var(--brand)}
+  .wrap{max-width:620px;margin:0 auto;padding:28px 20px 60px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.1rem;color:var(--ink);text-decoration:none;margin-bottom:18px}
+  .mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(160deg,var(--brand),var(--brand-deep));display:grid;place-items:center;flex:none}
+  h1{font-size:1.5rem;margin:6px 0 4px}
+  .muted{color:var(--ink-soft);font-size:.92rem;line-height:1.5}
+  .box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:18px}
+  .info{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:10px;padding:12px 14px;font-size:.88rem;color:var(--ink-soft);margin-top:14px;line-height:1.5}
+  label{display:block;font-weight:600;font-size:.86rem;margin:14px 0 6px}
+  input,textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-size:1rem;font-family:inherit}
+  textarea{min-height:80px;resize:vertical}
+  .big{width:100%;padding:14px;border-radius:12px;border:none;background:var(--brand);color:#fff;font-weight:700;font-size:1rem;margin-top:18px;cursor:pointer}
+  .big:disabled{opacity:.6;cursor:default}
+  .ok{display:none;text-align:center;padding:10px 0}
+  .ok .check{font-size:2.6rem}
+  .err{color:var(--danger);font-size:.86rem;margin-top:8px;display:none}
+  footer{max-width:620px;margin:0 auto;padding:0 20px 40px;color:var(--ink-faint);font-size:.82rem}
+  footer a{color:var(--ink-soft);margin-right:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="index.html">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 10.5a1.5 1.5 0 0 0 1.5 1.3h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7"/><circle cx="10" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/></svg></span>
+    IQ Market
+  </a>
+  <h1>Отказ от договора</h1>
+  <p class="muted">Съгласно чл. 52а от Закона за защита на потребителите, тук можете да подадете изявление за отказ от договора за вашата поръчка.</p>
+
+  <div class="info">
+    ⚠️ Съгласно чл. 57 ЗЗП правото на отказ <strong>не се прилага</strong> за доставени хранителни стоки и други бързоразвалящи се продукти, както и за разпечатани запечатани стоки по хигиенни причини (виж <a href="terms.html">Общи условия, т. 6</a>). Ако поръчката вече е доставена, свържете се с нас директно за рекламация на <a href="tel:0896277066">0896 277 066</a> — по-бързо е.
+    Тази форма е за всички останали случаи на отказ (напр. поръчка, която още не е доставена).
+  </div>
+
+  <div class="box" id="formBox">
+    <form id="wForm">
+      <label for="wName">Име</label>
+      <input id="wName" required placeholder="Име и фамилия">
+
+      <label for="wOrder">Номер на поръчката (#)</label>
+      <input id="wOrder" required inputmode="numeric" placeholder="напр. 1042">
+
+      <label for="wEmail">Имейл за потвърждение</label>
+      <input id="wEmail" type="email" required placeholder="your@email.com">
+      <div class="muted" style="margin-top:4px;font-size:.8rem">Не събираме имейл при регистрация — въведете го тук, за да получите писмено потвърждение на отказа.</div>
+
+      <label for="wNote">Бележка (по избор)</label>
+      <textarea id="wNote" placeholder="Причина или допълнителни данни (не е задължително)"></textarea>
+
+      <button class="big" id="wSubmit" type="submit">Потвърждавам отказа</button>
+      <div class="err" id="wErr"></div>
+    </form>
+    <div class="ok" id="wOk">
+      <div class="check">✅</div>
+      <h2 style="margin:6px 0 4px">Изявлението е прието</h2>
+      <p class="muted">Потвърждение с датата и часа на подаването е изпратено на посочения имейл.</p>
+    </div>
+  </div>
+
+  <p class="muted" style="margin-top:16px">Можете да подадете отказ и по друг недвусмислен начин — чрез стандартния формуляр (Приложение № 6 към ЗЗП) или свободен текст — на <a href="mailto:info@iqmarketbg.com">info@iqmarketbg.com</a> или <a href="tel:0896277066">0896 277 066</a>.</p>
+</div>
+<footer>
+  <a href="index.html">Начало</a><a href="privacy.html">Поверителност</a><a href="terms.html">Общи условия</a>
+  <div style="margin-top:8px">© 2026 IQ Market · Ямбол</div>
+</footer>
+<script>
+const SUPABASE_URL='https://opmnvrwnsqblyrtlogcj.supabase.co';
+const SUPABASE_KEY='sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const qs = new URLSearchParams(location.search);
+if (qs.get('order')) document.getElementById('wOrder').value = qs.get('order');
+
+document.getElementById('wForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('wSubmit');
+  const errEl = document.getElementById('wErr');
+  errEl.style.display = 'none';
+  const name = document.getElementById('wName').value.trim();
+  const orderNo = parseInt(document.getElementById('wOrder').value, 10);
+  const email = document.getElementById('wEmail').value.trim();
+  const note = document.getElementById('wNote').value.trim();
+  if (!name || !orderNo || !email) {
+    errEl.textContent = 'Моля, попълнете име, номер на поръчка и имейл.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Изпращане…';
+  try {
+    const { error } = await sb.rpc('submit_withdrawal', {
+      p_order_no: orderNo, p_name: name, p_email: email, p_statement: note || null
+    });
+    if (error) throw error;
+    document.getElementById('wForm').style.display = 'none';
+    document.getElementById('wOk').style.display = 'block';
+  } catch (err) {
+    errEl.textContent = 'Грешка при подаването. Моля, опитайте пак или пишете на info@iqmarketbg.com.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Потвърждавам отказа';
+  }
+});
+</script>
+</body>
+</html>
