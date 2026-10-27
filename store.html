@@ -436,17 +436,14 @@ function renderCartBadge(){const n=cartArr().length;const b=$('cartBadge');b.tex
 function renderDeliverBar(){
   const bar=$('deliverbar'); if(!bar)return;
   const sub=subtotal();
-  // Както в приложението: лентата е видима и при празна количка (старт-такса + колко до безплатна доставка)
+  if(sub<=0){bar.hidden=true;return;}
+  let txt=`Кошница: <strong>${money(sub)}</strong>`;
   if(PROFILE && ZONE.delivery_fee>0){
     const fee=calcFee(sub), fo=ZONE.free_over||0, toFree=(fee>0&&fo>0)?(fo-sub):0;
-    let txt=`Кошница: <strong>${money(sub)}</strong>`;
     txt += fee<=0 ? ' · <strong style="color:var(--brand)">Безплатна доставка 🎉</strong>' : ` · Доставка: <strong>${money(fee)}</strong>`;
     if(toFree>0) txt += ` · <span style="color:var(--brand)">още ${money(toFree)} до безплатна доставка 🚚</span>`;
-    bar.innerHTML=txt; bar.hidden=false; return;
   }
-  if(!PROFILE){ bar.innerHTML='Влез в профила си, за да видиш цената на доставката и кога е безплатна 🚚'; bar.hidden=false; return; }
-  if(sub<=0){bar.hidden=true;return;}
-  bar.innerHTML=`Кошница: <strong>${money(sub)}</strong>`; bar.hidden=false;
+  bar.innerHTML=txt; bar.hidden=false;
 }
 function renderCart(){
   const items=cartArr();
