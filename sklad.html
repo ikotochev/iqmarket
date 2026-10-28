@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Склад — IQ Market</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F5F7F1;--surface:#FFFFFF;--ink:#152418;--ink-soft:#4C5B51;--ink-faint:#7A897F;
+    --brand:#128A3E;--brand-deep:#0B6B2E;--line:#DCE4D6;--danger:#C0392B;--warn:#E67E22;--info:#1E6FD9;
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0D130F;--surface:#141C16;--ink:#EAF3EC;--ink-soft:#A3B4A8;--ink-faint:#7E9084;
+    --brand:#34C267;--brand-deep:#27A557;--line:#26322B;}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff}
+  .bar{max-width:900px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 16px}
+  .bar h1{flex:1;margin:0;font-size:1.1rem}
+  .hb{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:8px 12px;font-size:.9rem}
+  main{max-width:900px;margin:0 auto;padding:16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .top{display:flex;justify-content:space-between;gap:12px}
+  .code small{display:block;color:var(--ink-faint);font-size:.7rem}
+  .code b{font-size:2.6rem;letter-spacing:4px;color:var(--brand);line-height:1}
+  .side{text-align:right;font-size:.78rem;color:var(--ink-faint)}
+  .badge{display:inline-block;color:#fff;border-radius:12px;padding:3px 10px;font-size:.78rem;margin-bottom:6px}
+  .want{margin-top:8px;padding:8px 10px;border:1px solid var(--warn);border-radius:8px;color:var(--warn);font-weight:700;font-size:.9rem}
+  .items{border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
+  .it{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0}
+  .it b{white-space:nowrap}
+  .wbtn{border:1px solid var(--warn);color:var(--warn);background:transparent;border-radius:8px;padding:6px 10px;font-weight:700;font-size:.8rem}
+  .wbtn.done{border-color:var(--brand);color:var(--brand)}
+  .act{width:100%;margin-top:12px;border:0;border-radius:10px;padding:14px;color:#fff;font-size:1rem;font-weight:700}
+  .empty{text-align:center;color:var(--ink-faint);padding:60px 0}
+  .login{max-width:360px;margin:60px auto}
+  .login input{width:100%;padding:12px;margin:6px 0;border:1px solid var(--line);border-radius:10px;font-size:1rem;background:var(--bg);color:var(--ink)}
+  .login .act{background:var(--brand)}
+  .err{color:var(--danger);font-size:.88rem;min-height:1.2em}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tabs button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700}
+  .tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .hf{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px}
+  .hf label{font-size:.75rem;color:var(--ink-faint);display:block}
+  .hf input{padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:.95rem}
+  .hf .q{flex:1;min-width:120px}.hf .q input{width:100%}
+  .hf button{padding:10px 14px;border-radius:8px;border:0;background:var(--brand);color:#fff;font-weight:700}
+  .sum{background:var(--brand);color:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;font-weight:700}
+  .hc{cursor:pointer}.hc .tot{font-weight:800;white-space:nowrap}
+  .hc .det{display:none;margin-top:8px}.hc.open .det{display:block}
+  .hc .it{font-size:.9rem}.hc .tm{font-size:.78rem;color:var(--ink-faint);margin-top:6px}
+  .it.gone span{text-decoration:line-through;color:var(--ink-faint)}
+  .nbtn{border:1px solid var(--danger);color:var(--danger);background:transparent;border-radius:8px;padding:6px 10px;font-weight:700;font-size:.8rem;white-space:nowrap}
+  .nbtn.undo{border-color:var(--ink-faint);color:var(--ink-soft)}
+  .pr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .pr.out span{color:var(--ink-faint)}
+  .tg{border:0;border-radius:20px;padding:8px 14px;font-weight:700;color:#fff;background:var(--brand);min-width:104px}
+  .tg.out{background:var(--danger)}
+  .cat{font-weight:800;margin:14px 0 2px;color:var(--ink-soft);font-size:.85rem}
+  #alarm{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-weight:800;text-align:center}
+  #alarm .t{font-size:2.6rem}#alarm .s{font-size:1.3rem;margin-top:12px;font-weight:500}
+  #alarm.a{background:#D32F2F;color:#fff}#alarm.b{background:#fff;color:#D32F2F}
+  #sound{background:var(--warn);color:#fff;text-align:center;padding:10px;font-weight:700;display:none;cursor:pointer}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:60}
+  dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px;max-width:360px;width:90%}
+  dialog input{width:100%;padding:10px;margin:10px 0;border:1px solid var(--line);border-radius:8px;font-size:1.1rem;background:var(--bg);color:var(--ink)}
+  dialog .row{display:flex;gap:8px}dialog .row button{flex:1;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+  dialog .row .ok{background:var(--brand);color:#fff;border:0}
+</style>
+</head>
+<body>
+<header><div class="bar"><h1>Склад — Поръчки</h1>
+  <button class="hb" id="refresh" hidden>Обнови</button><button class="hb" id="logout" hidden>Изход</button></div></header>
+<div id="sound">🔊 Докосни тук, за да включиш звука за нови поръчки</div>
+<main id="app"></main>
+<div id="alarm"><div class="t">НОВА ПОРЪЧКА</div><div class="s">Докосни екрана</div></div>
+<div id="toast"></div>
+<dialog id="dlg"><div id="dlgT" style="font-weight:700"></div><div id="dlgS" style="color:var(--ink-soft);font-size:.9rem"></div>
+  <input id="dlgI" inputmode="decimal" placeholder="кг"><div class="row"><button id="dlgNo">Отказ</button><button class="ok" id="dlgOk">Запиши</button></div></dialog>
+<audio id="snd" src="sklad-alarm.ogg" preload="auto"></audio>
+<script>
+const sb=supabase.createClient('https://opmnvrwnsqblyrtlogcj.supabase.co','sb_publishable_UFfbSRU_PyRjPYguKutlyg_d6QS56hn');
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtQ=n=>String(+(+n).toFixed(3)).replace('.',',');
+const hhmm=t=>t?new Date(t).toLocaleTimeString('bg-BG',{hour:'2-digit',minute:'2-digit'}):'';
+const ST={pending:['Нова','#E67E22'],in_progress:['В процес','#1E6FD9'],ready:['Готово','#128A3E'],picked_up:['Взето','#888']};
+let VIEW='active',HIST=[],HQ='',WH=null,TASKS=[],KNOWN=new Set(),FIRST=true,CH=null,timers=[],soundOk=false;
+
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500);}
+function cleanPhone(p){return p.replace(/[\s\-()]/g,'').replace(/^\+359/,'0').replace(/^00359/,'0');}
+
+// ---- вход ----
+function showLogin(msg=''){
+  stop(); $('logout').hidden=$('refresh').hidden=true;
+  $('app').innerHTML=`<form class="card login" id="lf"><h2 style="margin-top:0">Вход за складове</h2>
+    <input id="ph" type="tel" placeholder="Телефон" autocomplete="username" required>
+    <input id="pw" type="password" placeholder="Парола" autocomplete="current-password" required>
+    <div class="err" id="er">${esc(msg)}</div><button class="act" id="go">Влез</button></form>`;
+  $('lf').onsubmit=async e=>{
+    e.preventDefault();unlockSound();$('go').disabled=true;$('er').textContent='';
+    try{
+      const {data:uid}=await sb.rpc('get_id_by_phone',{phone_number:cleanPhone($('ph').value.trim())});
+      if(!uid){$('er').textContent='Телефонът не е регистриран';return;}
+      const {error}=await sb.auth.signInWithPassword({email:uid+'@dostavka.app',password:$('pw').value});
+      if(error){$('er').textContent='Грешна парола';return;}
+      await start();
+    }catch(x){$('er').textContent='Грешка: '+x.message;}finally{const g=$('go');if(g)g.disabled=false;}
+  };
+}
+async function start(){
+  const {data:{user}}=await sb.auth.getUser();
+  if(!user){showLogin();return;}
+  const {data:pr}=await sb.from('profiles').select('role,warehouse_id').eq('id',user.id).maybeSingle();
+  if(!pr||pr.role!=='warehouse'||!pr.warehouse_id){
+    await sb.auth.signOut();
+    showLogin('Този акаунт не е на склад. Клиентите поръчват от магазина.');return;
+  }
+  WH=pr.warehouse_id;FIRST=true;KNOWN=new Set();
+  $('logout').hidden=$('refresh').hidden=false;
+  if(!soundOk)$('sound').style.display='block';
+  if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
+  await load();subscribe();
+  timers.push(setInterval(()=>sb.rpc('update_last_seen'),60000),setInterval(load,30000));
+  sb.rpc('update_last_seen');
+}
+function stop(){timers.forEach(clearInterval);timers=[];if(CH){sb.removeChannel(CH);CH=null;}stopAlarm();}
+
+// ---- данни ----
+async function load(){
+  const {data,error}=await sb.rpc('warehouse_get_tasks');
+  if(error){if(FIRST)$('app').innerHTML='<div class="empty">Няма връзка с поръчките.<br><br><button class="hb" style="background:var(--brand)" onclick="load()">Опитай пак</button></div>';return;}
+  TASKS=data||[];
+  const pend=new Set(TASKS.filter(t=>t.status==='pending').map(t=>t.id));
+  const isNew=[...pend].some(id=>!KNOWN.has(id));
+  KNOWN=pend;
+  if(!FIRST&&isNew)alarm();
+  FIRST=false;render();
+}
+function subscribe(){
+  if(CH)return;
+  const f={event:'*',schema:'public',table:'warehouse_tasks',filter:'warehouse_id=eq.'+WH};
+  CH=sb.channel('wt_'+WH).on('postgres_changes',f,()=>load()).subscribe();
+}
+function eur(n){return (+n).toLocaleString('bg-BG',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+const iso=d=>d.toLocaleDateString('sv-SE');
+function tabs(){return `<div class="tabs"><button class="${VIEW==='active'?'on':''}" onclick="setView('active')">Активни</button><button class="${VIEW==='hist'?'on':''}" onclick="setView('hist')">История</button><button class="${VIEW==='prod'?'on':''}" onclick="setView('prod')">Продукти</button></div>`;}
+function setView(v){VIEW=v;if(v==='hist')loadHist();else if(v==='prod')loadProd();else render();}
+async function loadHist(){
+  const d=new Date(),f=new Date();f.setDate(f.getDate()-7);
+  const cur=window._hr||{from:iso(f),to:iso(d)};window._hr=cur;
+  $('app').innerHTML=tabs()+'<div class="empty">Зареждане…</div>';
+  const {data,error}=await sb.rpc('warehouse_get_history',{p_from:cur.from,p_to:cur.to});
+  if(error){$('app').innerHTML=tabs()+'<div class="empty">Грешка при зареждане на историята.</div>';return;}
+  HIST=data||[];renderHist();
+}
+function renderHist(){
+  const min=new Date();min.setDate(min.getDate()-90);
+  const q=HQ.trim().replace('#','').toLowerCase();
+  const rows=HIST.filter(t=>!q||String(t.order_no??t.order_id.slice(0,3)).toLowerCase().includes(q));
+  const done=rows.filter(t=>t.order_status!=='cancelled');
+  const sum=done.reduce((a,t)=>a+(+t.total),0);
+  const head=tabs()+`<div class="hf"><div><label>От</label><input type="date" id="hF" value="${window._hr.from}" min="${iso(min)}" max="${iso(new Date())}"></div>
+    <div><label>До</label><input type="date" id="hT" value="${window._hr.to}" min="${iso(min)}" max="${iso(new Date())}"></div>
+    <div class="q"><label>Код на поръчка</label><input id="hQ" placeholder="напр. 1020" value="${esc(HQ)}"></div><button onclick="applyHist()">Покажи</button></div>
+    <div class="sum"><span>${done.length} изпълнени поръчки</span><span>${eur(sum)}</span></div>`;
+  const body=rows.length?rows.map(t=>{
+    const code=t.order_no!=null?t.order_no:String(t.order_id).slice(0,3).toUpperCase();
+    const canc=t.order_status==='cancelled';
+    const lbl=canc?['Отказана','#C0392B']:t.order_status==='delivered'?['Доставена','#128A3E']:['Взета от куриер','#888'];
+    const day=new Date(t.created_at).toLocaleDateString('bg-BG',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const items=(t.items||[]).map(i=>i.unavailable
+      ?`<div class="it gone"><span>${esc(i.name)} — ${fmtQ(i.qty)} ${i.is_weighted?'кг':esc(i.unit||'бр.')} · ЛИПСВАЛ</span><b>${eur(0)}</b></div>`
+      :`<div class="it"><span>${esc(i.name)} — ${fmtQ(i.actual_qty??i.qty)} ${i.is_weighted?'кг':esc(i.unit||'бр.')} × ${eur(i.price)}</span><b>${eur(i.line_total)}</b></div>`).join('');
+    return `<div class="card hc" onclick="this.classList.toggle('open')"><div class="top"><div class="code"><small>КОД · ${day}</small><b>${esc(code)}</b></div>
+      <div class="side"><span class="badge" style="background:${lbl[1]}">${lbl[0]}</span><div class="tot" style="${canc?'text-decoration:line-through;':''}">${eur(t.total)}</div></div></div>
+      <div class="det"><div class="items">${items}</div>
+      <div class="tm">Получена ${hhmm(t.created_at)}${t.started_at?' · започната '+hhmm(t.started_at):''}${t.completed_at?' · завършена '+hhmm(t.completed_at):''}${t.picked_up_at?' · взета '+hhmm(t.picked_up_at):''}</div></div></div>`;
+  }).join(''):'<div class="empty">Няма поръчки за този период.</div>';
+  $('app').innerHTML=head+body;
+  $('hQ').oninput=e=>{HQ=e.target.value;const p=e.target.selectionStart;renderHist();const n=$('hQ');n.focus();n.setSelectionRange(p,p);};
+}
+function applyHist(){window._hr={from:$('hF').value,to:$('hT').value};loadHist();}
+function render(){
+  if(VIEW!=='active')return;
+  if(!TASKS.length){$('app').innerHTML=tabs()+'<div class="empty">📥<br>Няма активни поръчки<br><small>Страницата се обновява сама</small></div>';return;}
+  $('app').innerHTML=tabs()+TASKS.map(t=>{
+    const [lbl,col]=ST[t.status]||['?','#888'];
+    const code=t.orders?.order_no!=null?t.orders.order_no:String(t.order_id).slice(0,3).toUpperCase();
+    const dt=t.orders?.delivery_time;
+    const items=(t.items||[]).map(i=>{
+      const p=i.products||{};
+      const nb=t.status==='in_progress'?(i.unavailable
+        ?`<button class="nbtn undo" onclick="setMissing('${i.id}',false)">Върни</button>`
+        :`<button class="nbtn" onclick="setMissing('${i.id}',true)">Няма го</button>`):'';
+      if(i.unavailable)return `<div class="it gone"><span>${esc(p.name)} — ${fmtQ(i.qty)} ${p.is_weighted?'кг':esc(p.unit||'бр.')} · ЛИПСВА</span>${nb}</div>`;
+      if(!p.is_weighted)return `<div class="it"><span>${esc(p.name)}</span><span style="display:flex;gap:8px;align-items:center"><b>${fmtQ(i.qty)} ${esc(p.unit||'бр.')}</b>${nb}</span></div>`;
+      const right=t.status==='in_progress'
+        ?`<button class="wbtn ${i.actual_qty!=null?'done':''}" onclick="weigh('${i.id}')">${i.actual_qty!=null?'✓ '+fmtQ(i.actual_qty)+' кг':'ВЪВЕДИ ГРАМАЖ'}</button>`
+        :`<b>${fmtQ(i.actual_qty??i.qty)} кг</b>`;
+      return `<div class="it"><span>⚖️ ${esc(p.name)} — поръчано ${fmtQ(i.qty)} кг</span><span style="display:flex;gap:8px;align-items:center">${right}${nb}</span></div>`;
+    }).join('');
+    const btn=t.status==='pending'?`<button class="act" style="background:var(--info)" onclick="setTask('${t.id}','start')">▶ ЗАПОЧНИ</button>`
+      :t.status==='in_progress'?`<button class="act" style="background:var(--brand)" onclick="setTask('${t.id}','ready')">✔ ЗАВЪРШИ</button>`:'';
+    return `<div class="card"><div class="top"><div class="code"><small>КОД:</small><b>${esc(code)}</b></div>
+      <div class="side"><span class="badge" style="background:${col}">${lbl}</span>
+      ${t.created_at?'<div>Получена: '+hhmm(t.created_at)+'</div>':''}${t.started_at?'<div>Започната: '+hhmm(t.started_at)+'</div>':''}${t.completed_at?'<div>Завършена: '+hhmm(t.completed_at)+'</div>':''}</div></div>
+      ${dt?'<div class="want">🕒 Клиентът иска доставка: '+esc(new Date(dt).toLocaleString('bg-BG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div>':''}
+      <div class="items">${items}</div>${btn}</div>`;
+  }).join('');
+}
+
+// ---- действия (същите заявки като в приложението) ----
+async function setTask(id,what){
+  const t=TASKS.find(x=>x.id===id);
+  if(what==='ready'&&(t.items||[]).some(i=>i.products?.is_weighted&&i.actual_qty==null&&!i.unavailable)){toast('⚖️ Първо въведи грамаж за всички продукти на килограм');return;}
+  const now=new Date().toISOString();
+  const upd=what==='start'?{status:'in_progress',started_at:now}:{status:'ready',ready_at:now,completed_at:now};
+  const {error}=await sb.from('warehouse_tasks').update(upd).eq('id',id);
+  if(error){toast('Грешка: '+error.message);return;}
+  if(what==='ready')toast('Поръчката е готова!');
+  load();
+}
+async function setMissing(itemId,gone){
+  if(gone&&!confirm('Да маркирам ли продукта като НЕНАЛИЧЕН? Клиентът ще получи известие и сумата ще се намали.'))return;
+  const {error}=await sb.from('order_items').update({unavailable:gone}).eq('id',itemId);
+  if(error){toast('Грешка: '+error.message);return;}
+  toast(gone?'Маркиран като липсващ':'Върнат в поръчката');load();
+}
+let PROD=[],PQ='';
+async function loadProd(){
+  $('app').innerHTML=tabs()+'<div class="empty">Зареждане…</div>';
+  const {data,error}=await sb.rpc('warehouse_get_products');
+  if(error){$('app').innerHTML=tabs()+'<div class="empty">Грешка при зареждане на продуктите.</div>';return;}
+  PROD=data||[];renderProd();
+}
+function renderProd(){
+  const q=PQ.trim().toLowerCase();
+  const rows=PROD.filter(p=>!q||p.name.toLowerCase().includes(q));
+  const out=PROD.filter(p=>!p.in_stock).length;
+  let cat=null,html='';
+  rows.forEach(p=>{
+    if(p.category!==cat){cat=p.category;html+=`<div class="cat">${esc(cat||'Без категория')}</div>`;}
+    html+=`<div class="pr ${p.in_stock?'':'out'}"><span>${esc(p.name)}</span><button class="tg ${p.in_stock?'':'out'}" onclick="toggleProd('${p.id}')">${p.in_stock?'Наличен':'Изчерпан'}</button></div>`;
+  });
+  $('app').innerHTML=tabs()+`<div class="hf"><div class="q"><label>Търси продукт (${PROD.length}, изчерпани: ${out})</label><input id="pQ" value="${esc(PQ)}" placeholder="име на продукт"></div></div><div class="card">${html||'<div class="empty">Няма продукти.</div>'}</div>`;
+  $('pQ').oninput=e=>{PQ=e.target.value;const c=e.target.selectionStart;renderProd();const n=$('pQ');n.focus();n.setSelectionRange(c,c);};
+}
+async function toggleProd(id){
+  const p=PROD.find(x=>x.id===id);const want=!p.in_stock;
+  const {error}=await sb.rpc('warehouse_set_availability',{p_product_id:id,p_available:want});
+  if(error){toast('Грешка: '+error.message);return;}
+  p.in_stock=want;toast(want?'Маркиран като наличен':'Маркиран като изчерпан');renderProd();
+}
+function ask(title,sub,val){
+  return new Promise(res=>{
+    $('dlgT').textContent=title;$('dlgS').textContent=sub;$('dlgI').value=val;
+    const d=$('dlg');d.showModal();
+    const done=v=>{d.close();res(v);};
+    $('dlgOk').onclick=()=>done($('dlgI').value);$('dlgNo').onclick=()=>done(null);
+  });
+}
+async function weigh(itemId){
+  let item,qty;
+  for(const t of TASKS)for(const i of t.items||[])if(i.id===itemId){item=i;}
+  qty=+item.qty;
+  const raw=await ask(item.products.name,'Поръчано: '+fmtQ(qty)+' кг',fmtQ(item.actual_qty??qty));
+  if(raw==null)return;
+  const v=parseFloat(raw.replace(',','.'));
+  if(!(v>0)){toast('Невалидно количество');return;}
+  if(qty>0&&Math.abs(v-qty)/qty>0.3&&!confirm(`⚠️ Голяма разлика\nПоръчано е ${fmtQ(qty)} кг, а въвеждаш ${fmtQ(v)} кг.\n\nСигурен ли си?`))return;
+  const {error}=await sb.from('order_items').update({actual_qty:v}).eq('id',itemId);
+  if(error){toast('Грешка при запис: '+error.message);return;}
+  load();
+}
+
+// ---- аларма ----
+let alarmT=null,flashT=null;
+function unlockSound(){
+  if(soundOk)return;const a=$('snd');
+  a.muted=true;a.play().then(()=>{a.pause();a.currentTime=0;a.muted=false;soundOk=true;$('sound').style.display='none';}).catch(()=>{a.muted=false;});
+}
+function alarm(){
+  try{$('snd').currentTime=0;$('snd').play().catch(()=>{});}catch(e){}
+  if(document.hidden&&'Notification' in window&&Notification.permission==='granted')new Notification('Нова поръчка — IQ Market');
+  clearTimeout(alarmT);alarmT=setTimeout(()=>stopAlarm(false),10000);
+  if(flashT)return;
+  const el=$('alarm');el.style.display='flex';let on=false;
+  const tick=()=>{on=!on;el.className=on?'a':'b';};tick();flashT=setInterval(tick,400);
+}
+function stopAlarm(silence=true){
+  clearTimeout(alarmT);clearInterval(flashT);flashT=null;
+  if(silence){$('snd').pause();}
+  $('alarm').style.display='none';
+}
+$('alarm').onclick=()=>stopAlarm(true);
+$('sound').onclick=unlockSound;
+document.addEventListener('pointerdown',unlockSound,{once:false});
+$('refresh').onclick=load;
+$('logout').onclick=async()=>{stop();await sb.auth.signOut();showLogin();};
+sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&WH){WH=null;showLogin();}});
+start();
+</script>
+</body>
+</html>

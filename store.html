@@ -230,7 +230,7 @@ function inCat(p,c){
   if(!t) return p.category===c;
   return (t.warehouse && p.warehouses && p.warehouses.name===t.warehouse) || (p.brand||'').toLowerCase().includes(t.brandKey);
 }
-const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, rating_override, votes_override, warehouses(name, working_hours)';
+const CATALOG_COLS='id, warehouse_id, name, category, price, unit, image_url, description, brand, discount_percent, is_weighted, stock_quantity, rating_override, votes_override, warehouses(name, working_hours)';
 
 const FAV_CAT='★ Моят магазин';
 let PRODUCTS=[], CATS=['Всички'], HIDDEN=[], CAT='Всички', SEARCH='';
@@ -247,6 +247,7 @@ function step(p){return p.is_weighted?0.5:1;}
 function unitLabel(p){return p.is_weighted?'кг':(p.unit||'бр.');}
 function calcFee(sub){const sf=ZONE.delivery_fee||0,mn=ZONE.min_order||0,fo=ZONE.free_over||0;if(sf<=0)return 0;if(fo<=mn)return sf;let f=sf*(fo-sub)/(fo-mn);if(f<0)f=0;if(f>sf)f=sf;return Math.round(f*100)/100;}
 function stars(r){r=Number(r)||0;let h='';for(let i=1;i<=6;i++)h+=`<span style="color:${i<=Math.round(r)?'#F5A623':'var(--ink-faint)'}">★</span>`;return h;}
+const oos=p=>p&&p.stock_quantity===0;   // изчерпан от склада (бутон Изчерпан)
 function loadCart(){try{return JSON.parse(localStorage.getItem('iqm_cart')||'{}');}catch(e){return {};}}
 function saveCart(){localStorage.setItem('iqm_cart', JSON.stringify(CART));renderCartBadge();}
 
@@ -334,7 +335,9 @@ function renderGrid(){
     const priceHtml= priced
       ? `<div class="price">${money(dp)}${p.is_weighted?'<span class="muted" style="font-size:.7rem">/кг</span>':''}${has?`<span class="old">${money(p.price)}</span>`:''}</div>`
       : `<div class="muted" style="font-size:.85rem;font-weight:600">Цена скоро</div>`;
-    const control= !priced
+    const control= oos(p)
+      ? `<button class="add" disabled style="opacity:.55;cursor:default">Изчерпан</button>`
+      : !priced
       ? `<button class="add" disabled style="opacity:.5;cursor:default">Очаквайте</button>`
       : inCart
       ? `<div class="stepper"><button data-dec="${p.id}">−</button><span class="q">${fmtQty(inCart.qty)} ${unitLabel(p)}</span><button data-inc="${p.id}">＋</button></div>`
@@ -397,6 +400,7 @@ async function loadRating(p){
 function renderDetailControl(p){
   const el=$('detCtl'); if(!el)return;
   const priced=discounted(p)>0, it=CART[p.id];
+  if(oos(p)){el.innerHTML=`<button class="big" disabled style="opacity:.55">Изчерпан</button>`;return;}
   if(!priced){el.innerHTML=`<button class="big" disabled style="opacity:.5">Очаквайте цена</button>`;return;}
   if(it){
     el.innerHTML=`<div class="stepper"><button data-d>−</button><span class="q">${fmtQty(it.qty)} ${unitLabel(p)}</span><button data-i>＋</button></div>`;
@@ -409,8 +413,8 @@ function renderDetailControl(p){
 }
 
 // ---------- кошница ----------
-function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p||discounted(p)<=0)return;CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
-function changeQty(id,dir){const it=CART[id];if(!it)return;const s=step(it.product);it.qty=Math.round((it.qty+dir*s)*1000)/1000;if(it.qty<=0)delete CART[id];saveCart();renderGrid();renderCart();}
+function addToCart(id){const p=PRODUCTS.find(x=>x.id===id);if(!p||discounted(p)<=0)return;if(oos(p)){toast(p.name+' е изчерпан');return;}CART[id]={product:p,qty:step(p)};saveCart();renderGrid();renderCart();toast(p.name+' е в кошницата');}
+function changeQty(id,dir){const it=CART[id];if(!it)return;if(dir>0&&oos(it.product))return;const s=step(it.product);it.qty=Math.round((it.qty+dir*s)*1000)/1000;if(it.qty<=0)delete CART[id];saveCart();renderGrid();renderCart();}
 async function toggleFav(id){
   if(!USER){authModal('login');return;}
   if(FAVS.has(id)){FAVS.delete(id);sb.from('quick_order_items').delete().eq('client_id',USER.id).eq('product_id',id);}
@@ -424,7 +428,7 @@ function syncCartWithCatalog(){
   const byId=new Map(all_ids()); let removed=0;
   for(const id of Object.keys(CART)){
     const fresh=byId.get(id);
-    if(!fresh||discounted(fresh)<=0){delete CART[id];removed++;}
+    if(!fresh||discounted(fresh)<=0||oos(fresh)){delete CART[id];removed++;}
     else CART[id].product=fresh;
   }
   saveCart();
@@ -483,6 +487,7 @@ const clean=p=>{const d=String(p||'').replace(/[^0-9]/g,'');if(d.startsWith('003
 async function refreshUser(){
   const {data}=await sb.auth.getUser(); USER=data?.user||null;
   if(USER){const {data:pr}=await sb.from('profiles').select('*').eq('id',USER.id).maybeSingle();PROFILE=pr;}
+  if(PROFILE&&PROFILE.role==='warehouse'){location.href='sklad.html';return;} // складовете имат отделен панел
   else PROFILE=null;
   if(PROFILE){
     if(PROFILE.zone){try{const {data:z}=await sb.from('delivery_zones').select('min_order,delivery_fee,free_over').eq('name',PROFILE.zone).maybeSingle();if(z)ZONE={min_order:+z.min_order||0,delivery_fee:+z.delivery_fee||0,free_over:+z.free_over||0};}catch(e){}}
