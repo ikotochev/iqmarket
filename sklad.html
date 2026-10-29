@@ -60,6 +60,9 @@
   .pr.out span{color:var(--ink-faint)}
   .tg{border:0;border-radius:20px;padding:8px 14px;font-weight:700;color:#fff;background:var(--brand);min-width:104px}
   .tg.out{background:var(--danger)}
+  .pp{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:3px 8px;font-size:.8rem;margin-top:4px}
+  .pp.none{border-color:var(--warn);color:var(--warn)}
+  .due{display:flex;justify-content:space-between;margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--bg);font-weight:700;font-size:.9rem}
   .cat{font-weight:800;margin:14px 0 2px;color:var(--ink-soft);font-size:.85rem}
   #alarm{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-weight:800;text-align:center}
   #alarm .t{font-size:2.6rem}#alarm .s{font-size:1.3rem;margin-top:12px;font-weight:500}
@@ -175,7 +178,7 @@ function renderHist(){
     const day=new Date(t.created_at).toLocaleDateString('bg-BG',{day:'2-digit',month:'2-digit',year:'numeric'});
     const items=(t.items||[]).map(i=>i.unavailable
       ?`<div class="it gone"><span>${esc(i.name)} — ${fmtQ(i.qty)} ${i.is_weighted?'кг':esc(i.unit||'бр.')} · ЛИПСВАЛ</span><b>${eur(0)}</b></div>`
-      :`<div class="it"><span>${esc(i.name)} — ${fmtQ(i.actual_qty??i.qty)} ${i.is_weighted?'кг':esc(i.unit||'бр.')} × ${eur(i.price)}</span><b>${eur(i.line_total)}</b></div>`).join('');
+      :`<div class="it"><span>${esc(i.name)} — ${fmtQ(i.actual_qty??i.qty)} ${i.is_weighted?'кг':esc(i.unit||'бр.')} × ${i.no_price?'<i>няма цена</i>':eur(i.purchase_price)}</span><b>${eur(i.line_total)}</b></div>`).join('');
     return `<div class="card hc" onclick="this.classList.toggle('open')"><div class="top"><div class="code"><small>КОД · ${day}</small><b>${esc(code)}</b></div>
       <div class="side"><span class="badge" style="background:${lbl[1]}">${lbl[0]}</span><div class="tot" style="${canc?'text-decoration:line-through;':''}">${eur(t.total)}</div></div></div>
       <div class="det"><div class="items">${items}</div>
@@ -210,8 +213,21 @@ function render(){
       <div class="side"><span class="badge" style="background:${col}">${lbl}</span>
       ${t.created_at?'<div>Получена: '+hhmm(t.created_at)+'</div>':''}${t.started_at?'<div>Започната: '+hhmm(t.started_at)+'</div>':''}${t.completed_at?'<div>Завършена: '+hhmm(t.completed_at)+'</div>':''}</div></div>
       ${dt?'<div class="want">🕒 Клиентът иска доставка: '+esc(new Date(dt).toLocaleString('bg-BG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div>':''}
-      <div class="items">${items}</div>${btn}</div>`;
+      <div class="items">${items}</div>${dueRow(t)}${btn}</div>`;
   }).join('');
+}
+
+// Сума към склада по ЦЕНИТЕ НА СКЛАДА; ориентировъчна, докато има непретеглени или без цена артикули
+function dueRow(t){
+  let sum=0,approx=false;
+  (t.items||[]).forEach(i=>{
+    if(i.unavailable)return;
+    const pp=+i.purchase_price;
+    if(!(pp>0)){approx=true;return;}
+    if(i.products?.is_weighted&&i.actual_qty==null)approx=true;
+    sum+=pp*(+(i.actual_qty??i.qty));
+  });
+  return `<div class="due"><span>Сума към вас${approx?' (ориентировъчно)':''}</span><span>${eur(Math.round(sum*100)/100)}</span></div>`;
 }
 
 // ---- действия (същите заявки като в приложението) ----
@@ -245,7 +261,8 @@ function renderProd(){
   let cat=null,html='';
   rows.forEach(p=>{
     if(p.category!==cat){cat=p.category;html+=`<div class="cat">${esc(cat||'Без категория')}</div>`;}
-    html+=`<div class="pr ${p.in_stock?'':'out'}"><span>${esc(p.name)}</span><button class="tg ${p.in_stock?'':'out'}" onclick="toggleProd('${p.id}')">${p.in_stock?'Наличен':'Изчерпан'}</button></div>`;
+    const pp=+p.purchase_price>0;
+    html+=`<div class="pr ${p.in_stock?'':'out'}"><span>${esc(p.name)}<br><button class="pp ${pp?'':'none'}" onclick="setPrice('${p.id}')">${pp?eur(p.purchase_price)+(p.unit?' / '+esc(p.unit):''):'Задай цена'} ✎</button></span><button class="tg ${p.in_stock?'':'out'}" onclick="toggleProd('${p.id}')">${p.in_stock?'Наличен':'Изчерпан'}</button></div>`;
   });
   $('app').innerHTML=tabs()+`<div class="hf"><div class="q"><label>Търси продукт (${PROD.length}, изчерпани: ${out})</label><input id="pQ" value="${esc(PQ)}" placeholder="име на продукт"></div></div><div class="card">${html||'<div class="empty">Няма продукти.</div>'}</div>`;
   $('pQ').oninput=e=>{PQ=e.target.value;const c=e.target.selectionStart;renderProd();const n=$('pQ');n.focus();n.setSelectionRange(c,c);};
@@ -255,6 +272,18 @@ async function toggleProd(id){
   const {error}=await sb.rpc('warehouse_set_availability',{p_product_id:id,p_available:want});
   if(error){toast('Грешка: '+error.message);return;}
   p.in_stock=want;toast(want?'Маркиран като наличен':'Маркиран като изчерпан');renderProd();
+}
+async function setPrice(id){
+  const p=PROD.find(x=>x.id===id);
+  const raw=await ask(p.name,'Вашата цена за '+(p.unit||'бр.')+' (без надценка)',p.purchase_price??'');
+  if(raw==null)return;
+  const v=parseFloat(String(raw).replace(',','.'));
+  if(!(v>0)||v>10000){toast('Невалидна цена');return;}
+  const old=+p.purchase_price;
+  if(old>0&&Math.abs(v-old)/old>0.2&&!confirm(`⚠️ Голяма промяна\nСтара цена: ${eur(old)}\nНова цена: ${eur(v)}\n\nПромяната ще бъде видяна от IQ Market. Сигурен ли си?`))return;
+  const {error}=await sb.rpc('warehouse_set_purchase_price',{p_product_id:id,p_price:v});
+  if(error){toast('Грешка: '+error.message);return;}
+  p.purchase_price=Math.round(v*100)/100;toast('Цената е записана');renderProd();
 }
 function ask(title,sub,val){
   return new Promise(res=>{
