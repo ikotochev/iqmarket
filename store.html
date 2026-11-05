@@ -50,6 +50,8 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .search{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:1rem;margin-bottom:14px}
   /* layout: категории отстрани + съдържание */
   .layout{display:grid;grid-template-columns:214px 1fr;gap:20px;align-items:start}
+  /* без това редът с категориите разтяга колоната (и цялата страница) до ~2400px на телефон */
+  .layout>*{min-width:0}
   .side{position:sticky;top:80px}
   .side-title{font-size:.75rem;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 8px 6px}
   .catlist{display:flex;flex-direction:column;gap:2px}
@@ -161,7 +163,40 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .installbar img{width:40px;height:40px;border-radius:10px;flex:none}
   .installbar .itxt{flex:1;min-width:0;font-size:.88rem;color:var(--ink-soft);line-height:1.4}
   .installbar .itxt strong{color:var(--ink);display:block;font-size:.95rem}
-  .installbar .x{background:none;border:0;color:var(--ink-faint);font-size:1.4rem;line-height:1;padding:4px 6px}
+  .installbar .x{background:none;border:0;color:var(--ink-faint);font-size:1.4rem;line-height:1;padding:4px 6px;min-width:40px;min-height:40px}
+  /* телефон: по-компактна горна лента и лента за инсталиране */
+  .brand{white-space:nowrap}
+  @media(max-width:520px){
+    .bar{gap:8px;padding:10px 12px}
+    .hbtn{padding:8px 10px}
+    .installbar{padding:8px 6px 8px 10px;gap:8px}
+    .installbar img{width:34px;height:34px;border-radius:8px}
+    .installbar .itxt{font-size:.82rem}
+    .installbar.has-btn .itxt span{display:none}
+  }
+  @media(max-width:420px){
+    .brand .btxt{display:none}
+  }
+  /* телефон: размерите на картите стоят ТУК (в края), защото основните правила за .card са след
+     по-ранния @media блок и го презаписваха — мобилните размери не се прилагаха изобщо */
+  @media(max-width:760px){
+    .side{position:sticky;top:var(--hdr,58px);z-index:15;background:var(--bg);margin:0 -14px;padding:6px 14px 0}
+    .card .img{aspect-ratio:4/3}
+    .card .body{padding:8px 9px 10px;gap:4px}
+    .card .name{font-size:.8rem;min-height:2.4em;line-height:1.2}
+    .card .brand-s{font-size:.68rem}
+    .price{font-size:.92rem}
+    .add{font-size:.8rem;padding:8px}
+    .stepper button{width:30px;height:34px;font-size:1.05rem}
+    .stepper .q{font-size:.82rem}
+    .fav{width:28px;height:28px;font-size:.9rem}
+    .toast{bottom:auto;top:calc(var(--hdr,58px) + 10px)}
+  }
+  @media(max-width:420px){
+    .card .name{font-size:.86rem}
+    .price{font-size:1rem}
+    .add{font-size:.86rem;padding:9px}
+  }
 </style>
 </head>
 <body>
@@ -172,12 +207,12 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   <div class="bar">
     <a class="brand" href="index.html">
       <span class="mark"><img src="logo-iqm.svg" alt="" style="width:100%;height:100%;border-radius:inherit;display:block"></span>
-      IQ Market
+      <span class="btxt">IQ Market</span>
     </a>
     <span class="spacer"></span>
     <button class="hbtn cart-btn" id="newsBtn" title="Известия и анкети">🔔<span class="badge" id="newsBadge" hidden>0</span></button>
     <button class="hbtn" id="accountBtn">Вход</button>
-    <button class="hbtn cart-btn" id="cartBtn">🛒 Кошница
+    <button class="hbtn cart-btn" id="cartBtn" aria-label="Кошница">🛒 <span class="lbl">Кошница</span>
       <span class="badge" id="cartBadge" hidden>0</span>
     </button>
   </div>
@@ -1011,6 +1046,7 @@ function showInstallBar(mode){
     $('installText').textContent='Отваряй магазина с едно докосване от началния екран.';
     $('installBtn').hidden=false;
   }
+  $('installBar').classList.toggle('has-btn',mode==='prompt');
   $('installBar').hidden=false;
 }
 window.__iqmOnInstall=e=>{deferredInstall=e;showInstallBar('prompt');};
@@ -1034,6 +1070,11 @@ $('installClose').onclick=()=>{$('installBar').hidden=true;try{localStorage.setI
   if(android)setTimeout(()=>{if(!deferredInstall&&$('installBar').hidden)showInstallBar('android');},12000);
 })();
 if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});}
+
+// височината на горната лента → --hdr (за залепения ред с категории и известията на телефон)
+(function(){const h=document.querySelector('header');if(!h)return;
+  const set=()=>document.documentElement.style.setProperty('--hdr',h.offsetHeight+'px');
+  set();if(window.ResizeObserver)new ResizeObserver(set).observe(h);else window.addEventListener('resize',set);})();
 
 // ---------- init ----------
 applyTheme(getTheme());
