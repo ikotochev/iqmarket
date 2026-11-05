@@ -1295,10 +1295,15 @@ function fmtDate(iso){try{const d=new Date(iso);const p=n=>String(n).padStart(2,
 let ordersChan=null;
 function watchOrders(){
   if(ordersChan||!USER)return;
-  ordersChan=sb.channel('orders_'+USER.id).on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'client_id=eq.'+USER.id},()=>{
+  const refresh=()=>{
     if($('ordList'))renderOrders();
-    if(OD_ID&&$('odBody'))fillOrderDetail(OD_ID);   // отворената поръчка се обновява сама (статус, доставчик)
-  }).subscribe();
+    if(OD_ID&&$('odBody'))fillOrderDetail(OD_ID);   // отворената поръчка се обновява сама (статус, доставчик, подготовка)
+  };
+  ordersChan=sb.channel('orders_'+USER.id)
+    .on('postgres_changes',{event:'*',schema:'public',table:'orders',filter:'client_id=eq.'+USER.id},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'warehouse_tasks'},refresh)          // базата праща само задачите по моите поръчки (права)
+    // order_items НЕ е в realtime публикацията — претеглено/„няма го“ идва чрез промяната на total в orders
+    .subscribe();
 }
 async function ordersModal(back){
   if(back!==undefined) ORD_BACK=(typeof back==='function')?back:null;   // откъде сме дошли (профил или никъде)
@@ -1338,23 +1343,36 @@ async function orderDetail(id){
   fillOrderDetail(id);
 }
 async function fillOrderDetail(id){
-  const [{data:o},{data:items}]=await Promise.all([
+  const [{data:o},{data:items},{data:tasks}]=await Promise.all([
     sb.from('orders').select('*').eq('id',id).maybeSingle(),
-    sb.from('order_items').select('*, products(name,unit,is_weighted)').eq('order_id',id)
+    sb.from('order_items').select('*, products(name,unit,is_weighted)').eq('order_id',id),
+    sb.from('warehouse_tasks').select('status').eq('order_id',id)
   ]);
   if(!o){const b=$('odBody');if(b)b.innerHTML='<div class="center">Няма такава поръчка</div>';return;}
   const[t,c]=stInfo(o.status);
-  const pend=(items||[]).some(i=>i.products?.is_weighted && i.actual_qty==null);
-  const its=(items||[]).map(i=>{const nm=i.products?.name||'';const w=i.products?.is_weighted;const q=(i.actual_qty??i.qty);const u=w?'кг':(i.products?.unit||'бр.');
+  const pend=(items||[]).some(i=>i.products?.is_weighted && i.actual_qty==null && !i.unavailable);
+  const missing=(items||[]).some(i=>i.unavailable);
+  const its=(items||[]).map(i=>{const nm=i.products?.name||'';const w=i.products?.is_weighted;const u=w?'кг':(i.products?.unit||'бр.');
+    if(i.unavailable) return `<div class="rowb" style="opacity:.6"><span><s>${escapeHtml(nm)} × ${fmtQty(i.qty)} ${u}</s> — няма го</span><span>${money(0)}</span></div>`;
+    const q=(i.actual_qty??i.qty);
     return `<div class="rowb"><span>${escapeHtml(nm)} × ${fmtQty(q)} ${u}${w&&i.actual_qty==null?' (претегля се)':''}</span><span>${money((i.price||0)*q)}</span></div>`;}).join('');
+  // подготовка — общ статус на складовете (като order_screen.dart: без детайли по складове)
+  const ts=(tasks||[]).map(x=>x.status);
+  const prep= !ts.length ? ['⏳','Приготвя се…']
+    : ts.every(x=>x==='picked_up') ? ['✅','Взета от доставчика']
+    : ts.every(x=>x==='ready'||x==='picked_up') ? ['📦','Готова — чака доставчика']
+    : ['⏳','Приготвя се…'];
+  const showPrep=['pending','preparing','ready','on_the_way'].includes(o.status);
   const b=$('odBody'); if(!b)return;
   b.innerHTML=`
     <h2 style="margin:2px 0 8px">Поръчка #${o.order_no??String(id).slice(0,8)}</h2>
     <div style="text-align:center;margin:10px 0"><span class="stbadge" style="background:${c};font-size:1rem;padding:8px 18px">${t}</span></div>
     ${o.status==='on_the_way'?`<div class="info" style="color:var(--ink)">🚴 <strong>Доставчикът е на път към теб!</strong><div id="odEta" style="margin-top:6px">${(+o.client_lat||+o.client_lng)?'<span class="muted"><em>Изчисляване на маршрут…</em></span>':'Поръчката пътува към теб.'}</div></div>`:''}
     <div class="info">📍 ${escapeHtml(o.client_address||'')}${o.delivery_time?`<br>🕒 Желан час: ${escapeHtml(formatDT(o.delivery_time))}`:''}<br>${o.payment_method==='card'?'💳 Плащане с карта':'💵 Плащане при доставка'}</div>
+    ${showPrep?`<div style="margin:14px 0 6px;font-weight:700">Подготовка</div><div class="info" style="color:var(--ink);margin-top:0">${prep[0]} <strong>Твоята поръчка</strong> — ${prep[1]}</div>`:''}
     <div style="margin:14px 0 6px;font-weight:700">Артикули</div>
     ${its||'<div class="muted">—</div>'}
+    ${missing?'<div class="muted" style="font-size:.8rem;margin-top:6px">Продуктите, които складът няма, не се доставят и не се таксуват.</div>':''}
     <div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
     ${(+o.vat_amount>0)?`<div class="rowb muted" style="font-size:.85rem"><span>в т.ч. ДДС ${VAT_PCT}%</span><span>${money(o.vat_amount)}</span></div>`:''}
     ${pend?'<div class="muted" style="font-size:.8rem;margin-top:6px">⚖️ Част от продуктите се претеглят — крайната цена може леко да варира.</div>':''}
