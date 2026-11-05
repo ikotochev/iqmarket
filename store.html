@@ -244,6 +244,13 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .toolbar .searchrow{margin-bottom:8px}
   .toolbar .side{position:relative;top:auto;z-index:auto;margin:0;padding:0;background:none}
   .toolbar .side.open .catlist{left:0;right:0}
+  .paysel.themes{display:grid;grid-template-columns:1fr 1fr}
+  /* „Външен вид“ → фон */
+  .bgs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 4px}
+  .bgopt{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:2px solid transparent;border-radius:12px;padding:6px 2px;color:var(--ink-soft);font-size:.78rem;font-weight:600}
+  .bgopt.active{border-color:var(--brand);color:var(--ink)}
+  .bgopt .sw{width:46px;height:46px;border-radius:12px;border:1px solid;display:grid;place-items:center}
+  .bgopt .sw i{width:26px;height:16px;border-radius:5px;display:block}
   /* бутон „към началото“ */
   .totop{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:30;width:48px;height:48px;border-radius:50%;
     border:none;background:var(--brand);color:#fff;font-size:1.5rem;font-weight:800;line-height:1;display:grid;place-items:center;
@@ -258,7 +265,9 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
 
 
 <script>try{var _t=localStorage.getItem('iqm_theme');document.documentElement.setAttribute('data-theme',_t==='light'||_t==='system'?_t:'dark');
-var _a=localStorage.getItem('iqm_accent');if(_a){document.documentElement.style.setProperty('--brand',_a);document.documentElement.style.setProperty('--brand-deep',_a);}}catch(e){}</script>
+var _a=localStorage.getItem('iqm_accent');if(_a){document.documentElement.style.setProperty('--brand',_a);document.documentElement.style.setProperty('--brand-deep',_a);}
+var _d=_t==='light'?false:(_t==='system'?matchMedia('(prefers-color-scheme: dark)').matches:true);
+var _v=localStorage.getItem(_d?'iqm_bgv_dark':'iqm_bgv_light');if(_v){_v=JSON.parse(_v);var _r=document.documentElement.style;_r.setProperty('--bg',_v.bg);_r.setProperty('--surface',_v.s);_r.setProperty('--surface-2',_v.s2);_r.setProperty('--line',_v.l);}}catch(e){}</script>
 <header>
   <div class="bar">
     <a class="brand" href="index.html">
@@ -970,14 +979,7 @@ function accountModal(){
     <label>Име</label>
     <div class="namefield"><input id="acName" value="${escapeHtml(PROFILE.name||'')}" readonly aria-label="Име"><button type="button" class="hbtn" id="acEdit">✏️ Редактирай</button></div>
     <button class="big" id="acAddrs" style="${GHOST}">📍 Моите адреси</button>
-    <label>Тема</label>
-    <div class="paysel">
-      <button type="button" class="payopt ${getTheme()==='light'?'active':''}" data-theme-opt="light">☀️ Светла</button>
-      <button type="button" class="payopt ${getTheme()==='dark'?'active':''}" data-theme-opt="dark">🌙 Тъмна</button>
-      <button type="button" class="payopt ${getTheme()==='system'?'active':''}" data-theme-opt="system">📱 Като телефона</button>
-    </div>
-    <label>Основен цвят</label>
-    <div class="accents">${ACCENTS.map(([n,c])=>`<button type="button" title="${n}" aria-label="${n}" data-accent="${c}" class="${getAccent()===c?'active':''}" style="background:${c||'#128A3E'}"></button>`).join('')}</div>
+    <button class="big" id="acLooks" style="${GHOST}">🎨 Външен вид <span class="muted" style="font-weight:600;font-size:.85rem">· тема, цвят, фон</span></button>
     <label>🔔 Известия на телефона</label>
     <div class="info" id="pushBox" style="margin-top:4px"></div>
     <div class="info" style="margin-top:16px">🎁 <strong>Покани приятел</strong><br>
@@ -1009,8 +1011,7 @@ function accountModal(){
   $('acAddrs').onclick=()=>addressesModal(accountModal);
   $('acHow').onclick=()=>howModal(accountModal);
   renderPushBox();
-  $('sheet').querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.accent);$('sheet').querySelectorAll('[data-accent]').forEach(x=>x.classList.toggle('active',x===b));});
-  $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeOpt);$('sheet').querySelectorAll('[data-theme-opt]').forEach(x=>x.classList.toggle('active',x===b));});
+  $('acLooks').onclick=looksModal;
   $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
   $('acOrders').onclick=()=>ordersModal(accountModal);
   $('acLogout').onclick=()=>{logout();closeModal();};
@@ -1434,8 +1435,64 @@ async function renderPoll(p){
 function getTheme(){try{const t=localStorage.getItem('iqm_theme');return t==='light'||t==='system'?t:'dark';}catch(e){return 'dark';}}
 function isDarkNow(){const t=getTheme();return t==='dark'||(t==='system'&&!!window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);}
 function applyTheme(m){m=(m==='light'||m==='system')?m:'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}
-  const mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content',isDarkNow()?'#141C16':'#FFFFFF');
-  applyAccent();}
+  applyBg(); applyAccent();}
+// ---------- фон: нюанси за тъмната и за светлата тема (помнят се отделно) ----------
+const BG_DARK=[['Черен',null],
+  ['Въглен',{bg:'#15181A',s:'#1D2124',s2:'#252A2D',l:'#31383C'}],
+  ['Графит',{bg:'#1C1F22',s:'#25292D',s2:'#2E3337',l:'#3B4247'}],
+  ['Сив',{bg:'#26292D',s:'#2F3338',s2:'#383D43',l:'#464C53'}]];
+const BG_LIGHT=[['Светъл',null],
+  ['Бял',{bg:'#FFFFFF',s:'#F6F7F5',s2:'#EDF0EA',l:'#E0E5DC'}],
+  ['Кремав',{bg:'#FAF6EE',s:'#FFFDF8',s2:'#F1EBDD',l:'#E6DDCB'}],
+  ['Сив',{bg:'#ECEFF1',s:'#FFFFFF',s2:'#E3E7EA',l:'#D3D9DD'}]];
+const BG_DEFAULT={dark:{bg:'#0D130F',s:'#141C16',l:'#26322B'},light:{bg:'#F5F7F1',s:'#FFFFFF',l:'#DCE4D6'}};
+function getBg(dark){try{return localStorage.getItem(dark?'iqm_bg_dark':'iqm_bg_light')||'';}catch(e){return '';}}
+function applyBg(name){
+  const dark=isDarkNow(), list=dark?BG_DARK:BG_LIGHT, k=dark?'dark':'light';
+  if(name!==undefined){
+    const pick=list.find(x=>x[0]===name);
+    try{
+      if(pick&&pick[1]){localStorage.setItem('iqm_bg_'+k,name);localStorage.setItem('iqm_bgv_'+k,JSON.stringify(pick[1]));}
+      else{localStorage.removeItem('iqm_bg_'+k);localStorage.removeItem('iqm_bgv_'+k);}
+    }catch(e){}
+  }
+  const sel=list.find(x=>x[0]===getBg(dark)), v=sel&&sel[1], st=document.documentElement.style;
+  ['--bg','--surface','--surface-2','--line'].forEach(x=>st.removeProperty(x));
+  if(v){st.setProperty('--bg',v.bg);st.setProperty('--surface',v.s);st.setProperty('--surface-2',v.s2);st.setProperty('--line',v.l);}
+  const mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content',v?v.s:BG_DEFAULT[k].s);
+}
+// ---------- „Външен вид“: тема, основен цвят, фон (от профила; „назад“ → профила) ----------
+function looksModal(){
+  const dark=isDarkNow(), list=dark?BG_DARK:BG_LIGHT, cur=getBg(dark)||list[0][0], def=BG_DEFAULT[dark?'dark':'light'];
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" id="lkX">←</button><div style="clear:both"></div>
+    <h2>🎨 Външен вид</h2>
+    <label>Тема</label>
+    <div class="paysel themes">
+      <button type="button" class="payopt ${getTheme()==='light'?'active':''}" data-theme-opt="light">☀️ Светла</button>
+      <button type="button" class="payopt ${getTheme()==='dark'&&!isOriginal()?'active':''}" data-theme-opt="dark">🌙 Тъмна</button>
+      <button type="button" class="payopt ${getTheme()==='system'?'active':''}" data-theme-opt="system">📱 Като телефона</button>
+      <button type="button" class="payopt ${isOriginal()?'active':''}" data-theme-opt="original">✨ Оригинал</button>
+    </div>
+    <label>Основен цвят</label>
+    <div class="accents">${ACCENTS.map(([n,c])=>`<button type="button" title="${n}" aria-label="${n}" data-accent="${c}" class="${getAccent()===c?'active':''}" style="background:${c||'#128A3E'}"></button>`).join('')}</div>
+    <label>Фон ${dark?'(тъмна тема)':'(светла тема)'}</label>
+    <div class="bgs">${list.map(([n,v])=>`<button type="button" class="bgopt ${cur===n?'active':''}" data-bg="${n}"><span class="sw" style="background:${v?v.bg:def.bg};border-color:${v?v.l:def.l}"><i style="background:${v?v.s:def.s}"></i></span>${n}</button>`).join('')}</div>
+    <p class="muted" style="font-size:.8rem;margin:6px 0 0">Фонът се помни отделно за светлата и за тъмната тема.</p>
+    <button class="big" id="lkDone" style="${GHOST}">Готово</button>`, accountModal);
+  $('lkX').onclick=accountModal; $('lkDone').onclick=accountModal;
+  $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.themeOpt==='original') resetLooks(); else applyTheme(b.dataset.themeOpt);
+    looksModal();   // фоновете зависят от темата → прерисуваме
+  });
+  $('sheet').querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.accent);looksModal();});
+  $('sheet').querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{applyBg(b.dataset.bg===list[0][0]?'':b.dataset.bg);looksModal();});
+}
+// „Оригинал“ = първоначалният вид на магазина: тъмна тема, зелен цвят, черен фон (и светлият фон по подразбиране)
+function isOriginal(){return getTheme()==='dark'&&!getAccent()&&!getBg(true);}
+function resetLooks(){
+  try{['iqm_bg_dark','iqm_bgv_dark','iqm_bg_light','iqm_bgv_light','iqm_accent'].forEach(k=>localStorage.removeItem(k));}catch(e){}
+  applyTheme('dark');
+}
 const ACCENTS=[['Зелено',''],['Синьо','#1E88E5'],['Червено','#E53935'],['Лилаво','#6A4CA5'],['Оранжево','#E67817'],['Тюркоаз','#00897B']];
 function getAccent(){try{return localStorage.getItem('iqm_accent')||'';}catch(e){return '';}}
 function mixHex(hex,to,t){const a=parseInt(hex.slice(1),16),b=parseInt(to.slice(1),16);const ch=s=>Math.round(((a>>s)&255)*(1-t)+((b>>s)&255)*t);return '#'+[16,8,0].map(s=>ch(s).toString(16).padStart(2,'0')).join('');}
