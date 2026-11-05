@@ -245,6 +245,12 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .toolbar .side{position:relative;top:auto;z-index:auto;margin:0;padding:0;background:none}
   .toolbar .side.open .catlist{left:0;right:0}
   .paysel.themes{display:grid;grid-template-columns:1fr 1fr}
+  /* ★ Моят магазин в горната лента */
+  #favBtn{font-size:1rem}
+  #favBtn .lbl2{margin-left:6px}
+  #favBtn.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  @media(max-width:600px){#favBtn .lbl2{display:none}}
+  @media(max-width:420px){.cart-btn .lbl{display:none}}   /* тесен телефон: кошницата само с иконата и брояча, за да се побере ★ */
   /* „Външен вид“ → фон */
   .bgs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 4px}
   .bgopt{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:2px solid transparent;border-radius:12px;padding:6px 2px;color:var(--ink-soft);font-size:.78rem;font-weight:600}
@@ -276,6 +282,7 @@ var _v=localStorage.getItem(_d?'iqm_bgv_dark':'iqm_bgv_light');if(_v){_v=JSON.pa
     </a>
     <span class="spacer"></span>
     <button class="hbtn cart-btn" id="newsBtn" title="Известия и анкети">🔔<span class="badge" id="newsBadge" hidden>0</span></button>
+    <button class="hbtn" id="favBtn" title="Моят магазин" aria-label="Моят магазин">★<span class="lbl2">Моят магазин</span></button>
     <button class="hbtn" id="accountBtn">Вход</button>
     <button class="hbtn cart-btn" id="cartBtn" aria-label="Кошница">🛒 <span class="lbl">Кошница</span>
       <span class="badge" id="cartBadge" hidden>0</span>
@@ -456,7 +463,8 @@ async function loadCatalog(){
 }
 function renderCats(){
   const counts={}; PRODUCTS.forEach(p=>counts[p.category]=(counts[p.category]||0)+1);
-  const list = PROFILE? [FAV_CAT,...CATS] : CATS;
+  const list = CATS;   // „★ Моят магазин“ е бутон в горната лента
+  const fb=$('favBtn'); if(fb) fb.classList.toggle('on',CAT===FAV_CAT);
   $('cats').innerHTML=list.map(c=>{
     const n= c===FAV_CAT? FAVS.size : (c==='Всички'?PRODUCTS.length:(BRAND_TABS[c]?PRODUCTS.filter(p=>inCat(p,c)).length:(counts[c]||0)));
     const emo= c===FAV_CAT? '' : (BRAND_TABS[c]?BRAND_TABS[c].emoji:(CAT_EMOJI[c]||'🏷️'));
@@ -702,6 +710,7 @@ async function refreshUser(){
   } else { ZONE={min_order:0,delivery_fee:0,free_over:0}; FAVS=new Set(); }
   $('accountBtn').textContent= PROFILE? 'Профил' : 'Вход';
   if(USER) watchOrders();
+  if(!PROFILE && CAT===FAV_CAT) CAT='Всички';
   renderCats(); renderGrid(); renderDeliverBar();
   if(USER){ mergeServerCart(); touchLastSeen(); refreshPushToken(); } else { CART_UID=null; SYNCED={}; }
 }
@@ -1116,7 +1125,7 @@ function howModal(back){
   const steps=[
     ['Разгледай каталога','Търси продукт в полето горе или избери категория. До търсачката можеш да подредиш продуктите по цена.'],
     ['Добави в кошницата','Натисни „Добави“ на продукта, после променяй количеството с − и ＋. Продуктите на килограм вървят през 0,5 кг.'],
-    ['Моят магазин','Влез в профила си и натисни ♡ на продукт. Така редовните покупки са винаги на едно място, в категория „★ Моят магазин“.'],
+    ['Моят магазин','Влез в профила си и натисни ♡ на продукт. Така редовните покупки са винаги на едно място: бутонът ★ в горната лента.'],
     ['Поръчай','Кошницата е горе вдясно. Минималната поръчка зависи от населеното място. Таксата за доставка намалява с всяко добавено евро и над определена сума е безплатна: виждаш я на живо в лентата горе. Избираш час за доставка (по желание) и плащане в брой или с карта.'],
     ['Следи поръчката','В „Профил → Моите поръчки“ виждаш статуса. Той се обновява сам, а когато доставчикът тръгне, виждаш колко е далеч от теб.'],
     ['Новини и анкети','Камбанката 🔔 горе показва обяви, промоции и анкети. Гласувай и виж резултатите веднага.'],
@@ -1359,6 +1368,12 @@ $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();scheduleSearchLog();}
 $('sort').onchange=e=>{SORT=e.target.value;renderGrid();};
 $('howLink').onclick=e=>{e.preventDefault();howModal();};
 $('catBtn').onclick=()=>setCatMenu(!catMenuOpen());
+$('favBtn').onclick=()=>{
+  if(!PROFILE){toast('Влез, за да виждаш „Моят магазин“');authModal('login');return;}
+  CAT = CAT===FAV_CAT ? 'Всички' : FAV_CAT;      // второ натискане → обратно към всички
+  SEARCH=''; $('search').value=''; setCatMenu(false);
+  renderCats(); renderGrid(); window.scrollTo({top:0,behavior:'smooth'});
+};
 $('catBack').onclick=()=>setCatMenu(false);
 $('cartBtn').onclick=openCart;
 $('newsBtn').onclick=newsModal;
