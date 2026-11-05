@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#141C16">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="IQ Market">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<script>/* хваща предложението за инсталиране рано — Chrome може да го прати преди края на страницата */
+window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__iqmInstall=e;if(window.__iqmOnInstall)window.__iqmOnInstall(e);});</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Магазин — IQ Market</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -147,6 +155,13 @@
   .payopt.active{border-color:var(--brand);color:var(--brand);background:var(--surface-2)}
   .ordrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;text-align:left;color:var(--ink)}
   .stbadge{color:#fff;border-radius:20px;padding:5px 12px;font-size:.78rem;font-weight:700;white-space:nowrap}
+  /* инсталиране като приложение (PWA) */
+  .installbar{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--brand);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+  .installbar[hidden]{display:none}
+  .installbar img{width:40px;height:40px;border-radius:10px;flex:none}
+  .installbar .itxt{flex:1;min-width:0;font-size:.88rem;color:var(--ink-soft);line-height:1.4}
+  .installbar .itxt strong{color:var(--ink);display:block;font-size:.95rem}
+  .installbar .x{background:none;border:0;color:var(--ink-faint);font-size:1.4rem;line-height:1;padding:4px 6px}
 </style>
 </head>
 <body>
@@ -170,6 +185,12 @@
 </header>
 
 <main>
+  <div id="installBar" class="installbar" hidden>
+    <img src="pwa-192.png" alt="">
+    <div class="itxt"><strong>Инсталирай IQ Market</strong><span id="installText">Отваряй магазина с едно докосване от началния екран.</span></div>
+    <button class="hbtn primary" id="installBtn" hidden>Инсталирай</button>
+    <button class="x" id="installClose" title="Скрий" aria-label="Скрий">×</button>
+  </div>
   <div id="announce"></div>
   <input class="search" id="search" placeholder="Търсене на продукт...">
   <div class="layout">
@@ -968,7 +989,51 @@ async function renderPoll(p){
 
 // ---------- тема (само светла/тъмна; тъмна по подразбиране) ----------
 function getTheme(){try{const t=localStorage.getItem('iqm_theme');return t==='light'?'light':'dark';}catch(e){return 'dark';}}
-function applyTheme(m){m=(m==='light')?'light':'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}}
+function applyTheme(m){m=(m==='light')?'light':'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}
+  const mt=document.querySelector('meta[name="theme-color"]');if(mt)mt.setAttribute('content',m==='light'?'#FFFFFF':'#141C16');}
+
+// ---------- инсталиране като приложение (PWA) ----------
+// Android/компютър (Chrome, Edge, Samsung Internet): бутон „Инсталирай“ чрез beforeinstallprompt.
+// iPhone/iPad (Safari): няма такъв бутон в браузъра → показваме кратко упътване.
+// Не се показва, ако магазинът вече е отворен като приложение или клиентът е скрил лентата.
+let deferredInstall=null;
+function isStandalone(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;}
+function installHidden(){try{return localStorage.getItem('iqm_install_hide')==='1';}catch(e){return false;}}
+function showInstallBar(mode){
+  if(isStandalone()||installHidden())return;
+  if(mode==='ios'){
+    $('installText').textContent='В Safari натисни „Сподели“ (квадратчето със стрелка ⬆️) и после „Добави към началния екран“.';
+    $('installBtn').hidden=true;
+  }else if(mode==='android'){
+    $('installText').textContent='Отвори менюто ⋮ на браузъра и избери „Инсталирай приложението“ или „Добави към началния екран“.';
+    $('installBtn').hidden=true;
+  }else{
+    $('installText').textContent='Отваряй магазина с едно докосване от началния екран.';
+    $('installBtn').hidden=false;
+  }
+  $('installBar').hidden=false;
+}
+window.__iqmOnInstall=e=>{deferredInstall=e;showInstallBar('prompt');};
+if(window.__iqmInstall)window.__iqmOnInstall(window.__iqmInstall);
+window.addEventListener('appinstalled',()=>{deferredInstall=null;$('installBar').hidden=true;toast('IQ Market е инсталиран ✓');});
+$('installBtn').onclick=async()=>{
+  if(!deferredInstall)return;
+  deferredInstall.prompt();
+  try{await deferredInstall.userChoice;}catch(e){}
+  deferredInstall=null;$('installBar').hidden=true;
+};
+$('installClose').onclick=()=>{$('installBar').hidden=true;try{localStorage.setItem('iqm_install_hide','1');}catch(e){}};
+(function(){
+  const ua=navigator.userAgent||'';
+  const ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const safari=/Safari/.test(ua)&&!/CriOS|FxiOS|EdgiOS|FBAN|FBAV|Instagram/.test(ua);
+  if(ios&&safari)showInstallBar('ios');
+  // Android: Chrome праща предложението със закъснение (виждано до ~13 сек.) или изобщо не го праща
+  // (Firefox, вече отказано). Ако не дойде до 12 сек., показваме упътване към менюто.
+  const android=/Android/.test(ua)&&!/FBAN|FBAV|Instagram|; wv\)/.test(ua);
+  if(android)setTimeout(()=>{if(!deferredInstall&&$('installBar').hidden)showInstallBar('android');},12000);
+})();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});}
 
 // ---------- init ----------
 applyTheme(getTheme());
