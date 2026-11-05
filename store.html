@@ -238,6 +238,17 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .side.open .catlink .cnt{display:inline}
   .catback{display:none}
   .catback:not([hidden]){display:block;position:fixed;inset:0;z-index:14;background:rgba(0,0,0,.35)}
+  /* лентата с търсачка и категории: залепена горе; скрива се при превъртане надолу, показва се при превъртане нагоре */
+  .toolbar{position:sticky;top:var(--hdr,58px);z-index:15;background:var(--bg);margin:0 -14px;padding:8px 14px 0;transition:transform .22s ease}
+  .toolbar.hide{transform:translateY(calc(-100% - 12px))}
+  .toolbar .searchrow{margin-bottom:8px}
+  .toolbar .side{position:relative;top:auto;z-index:auto;margin:0;padding:0;background:none}
+  .toolbar .side.open .catlist{left:0;right:0}
+  /* бутон „към началото“ */
+  .totop{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:30;width:48px;height:48px;border-radius:50%;
+    border:none;background:var(--brand);color:#fff;font-size:1.5rem;font-weight:800;line-height:1;display:grid;place-items:center;
+    box-shadow:0 6px 18px rgba(0,0,0,.35);opacity:.95}
+  .totop[hidden]{display:none}
   @media(min-width:761px){   /* широк екран: категориите в няколко колони */
     .side.open .catlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));max-height:70vh}
   }
@@ -272,29 +283,32 @@ var _a=localStorage.getItem('iqm_accent');if(_a){document.documentElement.style.
     <button class="x" id="installClose" title="Скрий" aria-label="Скрий">×</button>
   </div>
   <div id="announce"></div>
-  <div class="searchrow">
-    <input class="search" id="search" placeholder="Търсене на продукт..." type="search">
-    <select class="sortsel" id="sort" aria-label="Подреди">
-      <option value="">Подреди</option>
-      <option value="asc">Цена ↑</option>
-      <option value="desc">Цена ↓</option>
-    </select>
-  </div>
-  <div class="layout">
+  <div class="toolbar" id="toolbar">
+    <div class="searchrow">
+      <input class="search" id="search" placeholder="Търсене на продукт..." type="search">
+      <select class="sortsel" id="sort" aria-label="Подреди">
+        <option value="">Подреди</option>
+        <option value="asc">Цена ↑</option>
+        <option value="desc">Цена ↓</option>
+      </select>
+    </div>
     <aside class="side">
-      <div class="side-title">Категории</div>
       <button class="catbtn" id="catBtn" type="button" aria-expanded="false" aria-controls="cats">
         <span class="cl">☰ Категории</span><span class="cur" id="catCur">🛒 Всички</span><span class="car">▾</span>
       </button>
       <div class="catlist" id="cats"></div>
     </aside>
-    <div class="catback" id="catBack" hidden></div>
+  </div>
+  <div class="catback" id="catBack" hidden></div>
+  <div class="layout">
     <section class="content">
       <div id="grid" class="grid"></div>
       <div id="status" class="center">Зареждане…</div>
     </section>
   </div>
 </main>
+
+<button class="totop" id="toTop" type="button" aria-label="Към началото" title="Към началото" hidden>↑</button>
 
 <!-- Кошница -->
 <div class="overlay" id="overlay"></div>
@@ -1528,6 +1542,25 @@ try{const st=history.state&&history.state.iqm;   // при презарежда�
   else if(st==='base')history.pushState({iqm:'guard'},'');
   else if(st!=='guard')history.replaceState({iqm:'guard'},'');
 }catch(e){}
+
+// ---------- превъртане: лентата се крие надолу / показва нагоре; бутон „↑ към началото“ ----------
+(function(){
+  let lastY=window.scrollY, ticking=false;
+  const tb=$('toolbar'), top=$('toTop');
+  function update(){
+    ticking=false;
+    const y=window.scrollY, dy=y-lastY;
+    const keep = catMenuOpen() || document.activeElement===$('search') || y<240;   // не крий: отворено меню, пише се, близо до началото
+    if(keep) tb.classList.remove('hide');
+    else if(dy>6) tb.classList.add('hide');       // надолу
+    else if(dy<-6) tb.classList.remove('hide');   // нагоре — показва се веднага
+    if(Math.abs(dy)>6||keep) lastY=y;
+    top.hidden = y<700;
+  }
+  window.addEventListener('scroll',()=>{if(!ticking){ticking=true;requestAnimationFrame(update);}},{passive:true});
+  top.onclick=()=>{tb.classList.remove('hide');window.scrollTo({top:0,behavior:'smooth'});};
+  $('search').addEventListener('focus',()=>tb.classList.remove('hide'));
+})();
 
 // ---------- init ----------
 applyTheme(getTheme());
