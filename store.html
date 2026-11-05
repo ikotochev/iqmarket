@@ -264,9 +264,9 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
 <body>
 
 
-<script>try{var _t=localStorage.getItem('iqm_theme');document.documentElement.setAttribute('data-theme',_t==='light'||_t==='system'?_t:'dark');
+<script>try{var _t=localStorage.getItem('iqm_theme');document.documentElement.setAttribute('data-theme',_t==='light'?'light':'dark');
 var _a=localStorage.getItem('iqm_accent');if(_a){document.documentElement.style.setProperty('--brand',_a);document.documentElement.style.setProperty('--brand-deep',_a);}
-var _d=_t==='light'?false:(_t==='system'?matchMedia('(prefers-color-scheme: dark)').matches:true);
+var _d=_t!=='light';
 var _v=localStorage.getItem(_d?'iqm_bgv_dark':'iqm_bgv_light');if(_v){_v=JSON.parse(_v);var _r=document.documentElement.style;_r.setProperty('--bg',_v.bg);_r.setProperty('--surface',_v.s);_r.setProperty('--surface-2',_v.s2);_r.setProperty('--line',_v.l);}}catch(e){}</script>
 <header>
   <div class="bar">
@@ -1431,10 +1431,10 @@ async function renderPoll(p){
 }
 
 // ---------- тема (тъмна по подразбиране) ----------
-// светла / тъмна / като телефона (system) + основен цвят от 6 (като theme.dart в приложението)
-function getTheme(){try{const t=localStorage.getItem('iqm_theme');return t==='light'||t==='system'?t:'dark';}catch(e){return 'dark';}}
-function isDarkNow(){const t=getTheme();return t==='dark'||(t==='system'&&!!window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);}
-function applyTheme(m){m=(m==='light'||m==='system')?m:'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}
+// Светла / Оригинал (тъмна) + основен цвят от 6 + фон (като theme.dart в приложението)
+function getTheme(){try{return localStorage.getItem('iqm_theme')==='light'?'light':'dark';}catch(e){return 'dark';}}   // само Светла и Оригинал (тъмна)
+function isDarkNow(){return getTheme()==='dark';}
+function applyTheme(m){m=(m==='light')?'light':'dark';document.documentElement.setAttribute('data-theme',m);try{localStorage.setItem('iqm_theme',m);}catch(e){}
   applyBg(); applyAccent();}
 // ---------- фон: нюанси за тъмната и за светлата тема (помнят се отделно) ----------
 const BG_DARK=[['Черен',null],
@@ -1469,15 +1469,13 @@ function looksModal(){
     <label>Тема</label>
     <div class="paysel themes">
       <button type="button" class="payopt ${getTheme()==='light'?'active':''}" data-theme-opt="light">☀️ Светла</button>
-      <button type="button" class="payopt ${getTheme()==='dark'&&!isOriginal()?'active':''}" data-theme-opt="dark">🌙 Тъмна</button>
-      <button type="button" class="payopt ${getTheme()==='system'?'active':''}" data-theme-opt="system">📱 Като телефона</button>
-      <button type="button" class="payopt ${isOriginal()?'active':''}" data-theme-opt="original">✨ Оригинал</button>
+      <button type="button" class="payopt ${getTheme()==='dark'?'active':''}" data-theme-opt="original">✨ Оригинал</button>
     </div>
     <label>Основен цвят</label>
     <div class="accents">${ACCENTS.map(([n,c])=>`<button type="button" title="${n}" aria-label="${n}" data-accent="${c}" class="${getAccent()===c?'active':''}" style="background:${c||'#128A3E'}"></button>`).join('')}</div>
-    <label>Фон ${dark?'(тъмна тема)':'(светла тема)'}</label>
+    <label>Фон ${dark?'(Оригинал)':'(Светла)'}</label>
     <div class="bgs">${list.map(([n,v])=>`<button type="button" class="bgopt ${cur===n?'active':''}" data-bg="${n}"><span class="sw" style="background:${v?v.bg:def.bg};border-color:${v?v.l:def.l}"><i style="background:${v?v.s:def.s}"></i></span>${n}</button>`).join('')}</div>
-    <p class="muted" style="font-size:.8rem;margin:6px 0 0">Фонът се помни отделно за светлата и за тъмната тема.</p>
+    <p class="muted" style="font-size:.8rem;margin:6px 0 0">Фонът се помни отделно за Светла и за Оригинал. Натисни „Оригинал“ отново, за да върнеш първоначалния вид.</p>
     <button class="big" id="lkDone" style="${GHOST}">Готово</button>`, accountModal);
   $('lkX').onclick=accountModal; $('lkDone').onclick=accountModal;
   $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{
@@ -1487,7 +1485,7 @@ function looksModal(){
   $('sheet').querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.accent);looksModal();});
   $('sheet').querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{applyBg(b.dataset.bg===list[0][0]?'':b.dataset.bg);looksModal();});
 }
-// „Оригинал“ = първоначалният вид на магазина: тъмна тема, зелен цвят, черен фон (и светлият фон по подразбиране)
+// „Оригинал“ = тъмният вид на магазина; натиснат → връща и първоначалните цвят и фон (зелено, черно)
 function isOriginal(){return getTheme()==='dark'&&!getAccent()&&!getBg(true);}
 function resetLooks(){
   try{['iqm_bg_dark','iqm_bgv_dark','iqm_bg_light','iqm_bgv_light','iqm_accent'].forEach(k=>localStorage.removeItem(k));}catch(e){}
@@ -1504,7 +1502,6 @@ function applyAccent(c){
   st.setProperty('--brand', dark?mixHex(a,'#ffffff',.18):a);
   st.setProperty('--brand-deep', dark?a:mixHex(a,'#000000',.2));
 }
-try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(getTheme()==='system')applyTheme('system');});}catch(e){}
 // нова обява → червената точка на камбанката веднага (като news_icon_button.dart)
 try{sb.channel('news_badge').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>loadNewsBadge()).subscribe();}catch(e){}
 
