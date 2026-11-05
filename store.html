@@ -219,6 +219,28 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   .namefield input{padding-right:132px}
   .namefield input[readonly]{background:var(--surface-2);cursor:default}
   .namefield .hbtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:6px 10px;font-size:.8rem}
+  /* категории: един бутон „Категории“ и списък надолу — на телефон и на компютър */
+  .layout{grid-template-columns:1fr;gap:8px}
+  .side-title{display:none}
+  .side{position:sticky;top:var(--hdr,58px);z-index:15;background:var(--bg);margin:0 -14px;padding:6px 14px 0}
+  .catbtn{display:flex;align-items:center;gap:10px;width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:12px;padding:11px 14px;font-weight:700;font-size:.95rem;margin-bottom:8px;text-align:left}
+  .catbtn .cl{flex:none}
+  .catbtn .cur{flex:1;min-width:0;text-align:right;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catbtn .car{flex:none;transition:transform .15s;color:var(--ink-soft)}
+  .side.open .catbtn{border-color:var(--brand)}
+  .side.open .catbtn .car{transform:rotate(180deg)}
+  .catlist{display:none}
+  .side.open .catlist{display:flex;flex-direction:column;gap:2px;position:absolute;left:14px;right:14px;top:calc(100% - 4px);
+    max-height:min(65vh,520px);overflow-y:auto;padding:6px;background:var(--surface);border:1px solid var(--line);
+    border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.35);z-index:16}
+  .side.open .catlink{white-space:normal;border:none;border-radius:10px;padding:11px 12px;font-size:.95rem}
+  .side.open .catlink .cnt{display:inline}
+  .catback{display:none}
+  .catback:not([hidden]){display:block;position:fixed;inset:0;z-index:14;background:rgba(0,0,0,.35)}
+  @media(min-width:761px){   /* широк екран: категориите в няколко колони */
+    .side.open .catlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));max-height:70vh}
+  }
 </style>
 </head>
 <body>
@@ -261,8 +283,12 @@ var _a=localStorage.getItem('iqm_accent');if(_a){document.documentElement.style.
   <div class="layout">
     <aside class="side">
       <div class="side-title">Категории</div>
+      <button class="catbtn" id="catBtn" type="button" aria-expanded="false" aria-controls="cats">
+        <span class="cl">☰ Категории</span><span class="cur" id="catCur">🛒 Всички</span><span class="car">▾</span>
+      </button>
       <div class="catlist" id="cats"></div>
     </aside>
+    <div class="catback" id="catBack" hidden></div>
     <section class="content">
       <div id="grid" class="grid"></div>
       <div id="status" class="center">Зареждане…</div>
@@ -413,7 +439,9 @@ function renderCats(){
     const emo= c===FAV_CAT? '' : (BRAND_TABS[c]?BRAND_TABS[c].emoji:(CAT_EMOJI[c]||'🏷️'));
     return `<button class="catlink ${c===CAT?'active':''}" data-c="${c}">${emo} <span>${c}</span><span class="cnt">${n}</span></button>`;
   }).join('');
-  $('cats').querySelectorAll('.catlink').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;SEARCH='';$('search').value='';renderCats();renderGrid();window.scrollTo({top:0,behavior:'smooth'});});
+  $('cats').querySelectorAll('.catlink').forEach(b=>b.onclick=()=>{CAT=b.dataset.c;SEARCH='';$('search').value='';setCatMenu(false);renderCats();renderGrid();window.scrollTo({top:0,behavior:'smooth'});});
+  const ce= CAT===FAV_CAT? '' : (BRAND_TABS[CAT]?BRAND_TABS[CAT].emoji:(CAT_EMOJI[CAT]||'🏷️'));
+  $('catCur').textContent=(ce?ce+' ':'')+CAT;
 }
 function renderGrid(){
   let list=PRODUCTS;
@@ -1315,6 +1343,8 @@ async function fillOrderDetail(id){
 $('search').oninput=e=>{SEARCH=e.target.value;renderGrid();scheduleSearchLog();};
 $('sort').onchange=e=>{SORT=e.target.value;renderGrid();};
 $('howLink').onclick=e=>{e.preventDefault();howModal();};
+$('catBtn').onclick=()=>setCatMenu(!catMenuOpen());
+$('catBack').onclick=()=>setCatMenu(false);
 $('cartBtn').onclick=openCart;
 $('newsBtn').onclick=newsModal;
 $('lightbox').onclick=closeLightbox;
@@ -1460,7 +1490,13 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.s
 // Отворен прозорец (профил, кошница, продукт, снимка) = един запис в историята. „Назад“ го затваря
 // или връща към предишния екран (адреси → профил, поръчка → списък). На основния екран: категория/търсене →
 // „Всички“; на „Всички“ първото „назад“ предупреждава, второто излиза от приложението.
-function anyOverlay(){return $('modal').classList.contains('open')||$('drawer').classList.contains('open')||$('lightbox').classList.contains('open');}
+function catMenuOpen(){const sd=document.querySelector('.side');return !!sd&&sd.classList.contains('open');}
+function setCatMenu(open){
+  const sd=document.querySelector('.side'); if(!sd||catMenuOpen()===open)return;
+  sd.classList.toggle('open',open); $('catBtn').setAttribute('aria-expanded',String(open)); $('catBack').hidden=!open;
+  if(open)ovlPush(); else ovlDone();   // „назад“ затваря списъка
+}
+function anyOverlay(){return $('modal').classList.contains('open')||$('drawer').classList.contains('open')||$('lightbox').classList.contains('open')||catMenuOpen();}
 function ensureGuard(){if(EXIT_ARMED){EXIT_ARMED=false;clearTimeout(exitT);try{history.pushState({iqm:'guard'},'');}catch(e){}}}
 function ovlPush(){if(OVL)return;ensureGuard();try{history.pushState({iqm:'ovl'},'');OVL=true;}catch(e){}}
 // затворено от бутон/×: махаме записа (след миг — ако веднага се отваря друг прозорец, записът остава за него)
@@ -1473,7 +1509,8 @@ function backOverlay(){
     if(f){f(); return;}                       // предишният екран (сам си прави нов запис)
     $('modal').classList.remove('open'); if(dr)ovlPush(); return;
   }
-  if(dr){$('overlay').classList.remove('open');$('drawer').classList.remove('open');}
+  if(dr){$('overlay').classList.remove('open');$('drawer').classList.remove('open'); if(catMenuOpen())ovlPush(); return;}
+  if(catMenuOpen()){document.querySelector('.side').classList.remove('open');$('catBtn').setAttribute('aria-expanded','false');$('catBack').hidden=true;}
 }
 window.addEventListener('popstate',()=>{
   if(IGNORE_POP){IGNORE_POP=false;return;}
