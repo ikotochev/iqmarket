@@ -713,6 +713,7 @@ async function refreshUser(){
   if(!PROFILE && CAT===FAV_CAT) CAT='Всички';
   renderCats(); renderGrid(); renderDeliverBar();
   if(USER){ mergeServerCart(); touchLastSeen(); refreshPushToken(); } else { CART_UID=null; SYNCED={}; }
+  ORDER_EV_LOADED=false; loadNewsBadge();
 }
 function openModal(html,back){
   if(!/id="odBody"/.test(html)){ OD_ID=null; stopDriverWatch(); }   // излизаме от поръчката → спираме проследяването
@@ -918,7 +919,9 @@ async function fbMessaging(){
   if(!firebase.apps.length) firebase.initializeApp(window.IQM_FIREBASE);
   fbMsg=firebase.messaging();
   // докато сайтът е отворен, Firebase не показва известие → показваме го като съобщение в сайта
-  fbMsg.onMessage(p=>{const n=(p&&p.notification)||{};toast((n.title?n.title+': ':'')+(n.body||''));if($('ordList'))renderOrders();});
+  fbMsg.onMessage(p=>{const n=(p&&p.notification)||{};
+    if(/Поръчка/.test(n.title||'') && Date.now()-LAST_ORDER_TOAST<5000) return;   // вече показано от камбанката
+    toast((n.title?n.title+': ':'')+(n.body||''));if($('ordList'))renderOrders();});
   return fbMsg;
 }
 // нов service worker → изчакай да стане активен (иначе абонаментът пада с „no active Service Worker“)
@@ -1296,6 +1299,7 @@ let ordersChan=null;
 function watchOrders(){
   if(ordersChan||!USER)return;
   const refresh=()=>{
+    loadNewsBadge();                                  // червената точка + кратко съобщение при ново събитие
     if($('ordList'))renderOrders();
     if(OD_ID&&$('odBody'))fillOrderDetail(OD_ID);   // отворената поръчка се обновява сама (статус, доставчик, подготовка)
   };
@@ -1415,13 +1419,49 @@ async function loadAnnounce(){
 
 // ---------- известия + анкети ----------
 let NEWS_IDS=[];
+// ---------- камбанката: събития по моите поръчки (от данните в базата — без разрешение, на всяко устройство) ----------
+// Същите моменти като push известията: приета → претеглена/готова → тръгна → доставена (или отказана).
+let ORDER_EVENTS=[], ORDER_EV_LOADED=false;
+async function loadOrderEvents(){
+  if(!USER){ORDER_EVENTS=[];return [];}
+  const since=new Date(Date.now()-14*864e5).toISOString();
+  const {data,error}=await sb.from('orders')
+    .select('id,order_no,status,total,created_at,started_at,delivered_at,payment_status,warehouse_tasks(status,ready_at),order_items(actual_qty)')
+    .eq('client_id',USER.id).gte('created_at',since).order('created_at',{ascending:false}).limit(20);
+  if(error) return ORDER_EVENTS;
+  const ev=[];
+  for(const o of (data||[])){
+    if(HIDDEN_PAY.includes(o.payment_status)) continue;          // неплатени/отказани картови не се показват
+    const no='#'+(o.order_no??String(o.id).slice(0,8));
+    ev.push({id:`o:${o.id}:new`,oid:o.id,at:o.created_at,ic:'🧾',t:`Поръчка ${no} е приета`});
+    const ts=o.warehouse_tasks||[];
+    if(ts.length && ts.every(x=>x.status==='ready'||x.status==='picked_up')){
+      const at=ts.map(x=>x.ready_at).filter(Boolean).sort().pop()||o.created_at;
+      const weighed=(o.order_items||[]).some(i=>i.actual_qty!=null);
+      ev.push({id:`o:${o.id}:ready`,oid:o.id,at,ic:weighed?'⚖️':'📦',t: weighed?`Поръчка ${no} е претеглена — крайна цена ${money(o.total)}`:`Поръчка ${no} е готова`});
+    }
+    if(o.started_at && (o.status==='on_the_way'||o.status==='delivered')) ev.push({id:`o:${o.id}:go`,oid:o.id,at:o.started_at,ic:'🚗',t:`Поръчка ${no} тръгна към теб`});
+    if(o.status==='delivered') ev.push({id:`o:${o.id}:done`,oid:o.id,at:o.delivered_at||o.started_at||o.created_at,ic:'✅',t:`Поръчка ${no} е доставена`});
+    if(o.status==='cancelled') ev.push({id:`o:${o.id}:cancel`,oid:o.id,at:o.created_at,ic:'❌',t:`Поръчка ${no} е отказана`});
+  }
+  ev.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  // ново събитие, докато магазинът е отворен → кратко съобщение (не и при първото зареждане)
+  if(ORDER_EV_LOADED && document.visibilityState==='visible'){
+    const old=new Set(ORDER_EVENTS.map(e=>e.id)); const fresh=ev.find(e=>!old.has(e.id));
+    if(fresh){ LAST_ORDER_TOAST=Date.now(); toast(fresh.ic+' '+fresh.t); }
+  }
+  ORDER_EVENTS=ev; ORDER_EV_LOADED=true;
+  return ev;
+}
+let LAST_ORDER_TOAST=0;
 async function loadNewsBadge(){
   try{
     const [{data:a},{data:p}]=await Promise.all([
       sb.from('announcements').select('id').eq('is_active',true),
       sb.from('polls').select('id').eq('is_active',true)
     ]);
-    NEWS_IDS=[...(a||[]).map(x=>'a'+x.id),...(p||[]).map(x=>'p'+x.id)];
+    const oev=await loadOrderEvents();
+    NEWS_IDS=[...(a||[]).map(x=>'a'+x.id),...(p||[]).map(x=>'p'+x.id),...oev.map(e=>e.id)];
     let seen=[]; try{seen=JSON.parse(localStorage.getItem('iqm_seen_news')||'[]');}catch(e){}
     const unseen=NEWS_IDS.filter(i=>!seen.includes(i)).length;
     const b=$('newsBadge'); if(b){b.textContent=unseen;b.hidden=unseen===0;}
@@ -1436,10 +1476,13 @@ async function newsModal(){
     sb.from('polls').select('id,question,options').eq('is_active',true).order('created_at',{ascending:false})
   ]);
   let html='';
-  if(anns&&anns.length){html+='<div style="font-weight:700;margin:6px 0 4px">📣 Обяви</div>'+anns.map(a=>`<div class="info" style="color:var(--ink)"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}<div class="muted" style="font-size:.75rem;margin-top:4px">${fmtDate(a.created_at)}</div></div>`).join('');}
+  const oev=(ORDER_EVENTS||[]).slice(0,10);
+  if(oev.length){html+='<div style="font-weight:700;margin:6px 0 4px">📦 Моите поръчки</div>'+oev.map(e=>`<button class="ordrow" data-ev-o="${e.oid}" style="margin-bottom:6px"><div><div style="font-weight:700">${e.ic} ${escapeHtml(e.t)}</div><div class="muted" style="font-size:.78rem">${fmtDate(e.at)}</div></div><span class="muted">›</span></button>`).join('');}
+  if(anns&&anns.length){html+='<div style="font-weight:700;margin:14px 0 4px">📣 Обяви</div>'+anns.map(a=>`<div class="info" style="color:var(--ink)"><strong>${escapeHtml(a.title||'')}</strong>${a.body?`<div>${escapeHtml(a.body)}</div>`:''}<div class="muted" style="font-size:.75rem;margin-top:4px">${fmtDate(a.created_at)}</div></div>`).join('');}
   if(polls&&polls.length){html+='<div style="font-weight:700;margin:14px 0 4px">🗳️ Анкети</div><div id="pollsWrap"></div>';}
   const b=$('newsBody'); if(!b)return;
   b.innerHTML= html || '<div class="center">Няма нови известия</div>';
+  b.querySelectorAll('[data-ev-o]').forEach(x=>x.onclick=()=>{ORD_BACK=null;orderDetail(x.dataset.evO);});
   if(polls&&polls.length){for(const p of polls){await renderPoll(p);}}
 }
 async function renderPoll(p){
@@ -1536,7 +1579,10 @@ function applyAccent(c){
   st.setProperty('--brand-deep', dark?a:mixHex(a,'#000000',.2));
 }
 // нова обява → червената точка на камбанката веднага (като news_icon_button.dart)
-try{sb.channel('news_badge').on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>loadNewsBadge()).subscribe();}catch(e){}
+try{sb.channel('news_badge')
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'announcements'},()=>loadNewsBadge())
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'polls'},()=>loadNewsBadge())   // нова анкета също (polls е в realtime публикацията)
+  .subscribe();}catch(e){}
 
 // ---------- инсталиране като приложение (PWA) ----------
 // Android/компютър (Chrome, Edge, Samsung Internet): бутон „Инсталирай“ чрез beforeinstallprompt.
