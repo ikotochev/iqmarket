@@ -645,7 +645,7 @@ async function refreshUser(){
   $('accountBtn').textContent= PROFILE? 'Профил' : 'Вход';
   if(USER) watchOrders();
   renderCats(); renderGrid(); renderDeliverBar();
-  if(USER){ mergeServerCart(); touchLastSeen(); } else { CART_UID=null; SYNCED={}; }
+  if(USER){ mergeServerCart(); touchLastSeen(); refreshPushToken(); } else { CART_UID=null; SYNCED={}; }
 }
 function openModal(html){
   if(!/id="odBody"/.test(html)){ OD_ID=null; stopDriverWatch(); }   // излизаме от поръчката → спираме проследяването
@@ -822,7 +822,93 @@ function forgotModal(phone0){
   $('fpResend').onclick=ev=>{ev.preventDefault(); sent=false; send();};
   $('fpBack').onclick=()=>authModal('login');
 }
-async function logout(){if(ordersChan){try{sb.removeChannel(ordersChan);}catch(e){}ordersChan=null;}await sb.auth.signOut();await refreshUser();toast('Излязохте');}
+async function logout(){if(ordersChan){try{sb.removeChannel(ordersChan);}catch(e){}ordersChan=null;}
+  // като приложението: излезлият потребител не трябва да получава известия на това устройство
+  const pt=pushToken(); if(pt){try{await sb.rpc('unregister_fcm_token',{p_token:pt});}catch(e){}}
+  await sb.auth.signOut();await refreshUser();toast('Излязохте');}
+
+// ---------- известия (push) чрез Firebase — като fcm_service.dart в приложението ----------
+// Токенът се записва с register_fcm_token за влезлия клиент; send-fcm на сървъра праща до него
+// (готова поръчка, доставчик на път, обяви от админа). На iPhone работи само от инсталираното приложение.
+const FB_VER='10.12.2', PUSH_SCOPE='/firebase-cloud-messaging-push-scope';
+let fbMsg=null;
+function pushToken(){try{return localStorage.getItem('iqm_push_token')||'';}catch(e){return '';}}
+function isIOS(){const ua=navigator.userAgent||'';return /iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
+function pushSupport(){
+  if('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) return 'ok';
+  return (isIOS() && !isStandalone()) ? 'ios-install' : 'no';
+}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('не се зареди '+src));document.head.appendChild(s);});}
+async function fbMessaging(){
+  if(fbMsg)return fbMsg;
+  if(!window.IQM_FIREBASE) await loadScript('firebase-config.js');   // в страницата self === window
+  if(!window.firebase||!firebase.messaging){
+    await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-compat.js`);
+    await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-messaging-compat.js`);
+  }
+  if(!firebase.apps.length) firebase.initializeApp(window.IQM_FIREBASE);
+  fbMsg=firebase.messaging();
+  // докато сайтът е отворен, Firebase не показва известие → показваме го като съобщение в сайта
+  fbMsg.onMessage(p=>{const n=(p&&p.notification)||{};toast((n.title?n.title+': ':'')+(n.body||''));if($('ordList'))renderOrders();});
+  return fbMsg;
+}
+// нов service worker → изчакай да стане активен (иначе абонаментът пада с „no active Service Worker“)
+function swActive(reg){
+  if(reg.active) return Promise.resolve(reg);
+  const sw=reg.installing||reg.waiting;
+  return new Promise((res,rej)=>{
+    const t=setTimeout(()=>rej(new Error('service worker не се активира')),15000);
+    if(!sw){clearTimeout(t);res(reg);return;}
+    sw.addEventListener('statechange',()=>{if(sw.state==='activated'){clearTimeout(t);res(reg);}});
+  });
+}
+async function getPushToken(){
+  const m=await fbMessaging();
+  const reg=await swActive(await navigator.serviceWorker.register('firebase-messaging-sw.js',{scope:PUSH_SCOPE}));
+  return await m.getToken({serviceWorkerRegistration:reg});
+}
+async function enablePush(){            // само от натискане на бутон (iPhone го изисква)
+  const sup=pushSupport();
+  if(sup!=='ok'){renderPushBox();return;}
+  let perm=Notification.permission;
+  if(perm==='default') perm=await Notification.requestPermission();
+  if(perm!=='granted'){toast(perm==='denied'?'Известията са блокирани в браузъра':'Известията не са разрешени');renderPushBox();return;}
+  const b=$('pushOn'); if(b){b.disabled=true;b.textContent='Включване…';}
+  try{
+    const token=await getPushToken();
+    if(!token) throw new Error('няма токен');
+    const {error}=await sb.rpc('register_fcm_token',{p_token:token});
+    if(error) throw error;
+    try{localStorage.setItem('iqm_push_token',token);}catch(e){}
+    toast('Известията са включени ✓');
+  }catch(e){ console.warn('push',e); toast('Не успяхме да включим известията. Опитай пак след малко.'); }
+  renderPushBox();
+}
+async function disablePush(){
+  const t=pushToken();
+  try{ if(t) await sb.rpc('unregister_fcm_token',{p_token:t}); }catch(e){}
+  try{ const m=await fbMessaging(); await m.deleteToken(); }catch(e){}
+  try{localStorage.removeItem('iqm_push_token');}catch(e){}
+  toast('Известията са изключени'); renderPushBox();
+}
+// при вход: ако известията вече са включени в този браузър → тихо обнови токена (Firebase понякога го сменя)
+async function refreshPushToken(){
+  if(!USER||!pushToken()||pushSupport()!=='ok'||Notification.permission!=='granted')return;
+  try{const tok=await getPushToken(); if(tok){await sb.rpc('register_fcm_token',{p_token:tok}); if(tok!==pushToken())localStorage.setItem('iqm_push_token',tok);}}catch(e){}
+}
+function renderPushBox(){
+  const box=$('pushBox'); if(!box)return;
+  const sup=pushSupport();
+  if(sup==='ios-install'){box.innerHTML='На iPhone известията работят, когато магазинът е <strong>инсталиран</strong>: в Safari натисни „Сподели“ ⬆️ → „Добави към началния екран“, после го отвори от иконата и се върни тук.';return;}
+  if(sup==='no'){box.innerHTML='Този браузър не поддържа известия. Опитай с Chrome.';return;}
+  if(Notification.permission==='denied'){box.innerHTML='Известията са <strong>блокирани</strong> в браузъра. Разреши ги от настройките на сайта (катинарчето до адреса), после се върни тук.';return;}
+  if(Notification.permission==='granted' && pushToken()){
+    box.innerHTML='✅ <strong>Включени.</strong> Ще получаваш известие, когато поръчката е готова и тръгне към теб, и за новини.<br><button class="hbtn" id="pushOff" style="margin-top:8px">Изключи</button>';
+    $('pushOff').onclick=disablePush; return;
+  }
+  box.innerHTML='Получавай известие, когато поръчката е готова и тръгне към теб, дори когато магазинът е затворен.<br><button class="hbtn primary" id="pushOn" style="margin-top:8px">🔔 Включи известията</button>';
+  $('pushOn').onclick=enablePush;
+}
 function accountModal(){
   if(!PROFILE){authModal('login');return;}
   const credits=PROFILE.free_delivery_credits||0;
@@ -841,6 +927,8 @@ function accountModal(){
     </div>
     <label>Основен цвят</label>
     <div class="accents">${ACCENTS.map(([n,c])=>`<button type="button" title="${n}" aria-label="${n}" data-accent="${c}" class="${getAccent()===c?'active':''}" style="background:${c||'#128A3E'}"></button>`).join('')}</div>
+    <label>🔔 Известия на телефона</label>
+    <div class="info" id="pushBox" style="margin-top:4px"></div>
     <div class="info" style="margin-top:16px">🎁 <strong>Покани приятел</strong><br>
       Твоят код: <strong style="font-size:1.1rem;letter-spacing:1px">${escapeHtml(PROFILE.referral_code||'')}</strong>
       <button class="hbtn" id="acCopy" style="margin-left:8px;padding:4px 10px">Копирай</button><br>
@@ -857,6 +945,7 @@ function accountModal(){
   $('acSave').onclick=async()=>{const n=$('acName').value.trim();if(!n){toast('Въведи име');return;}const {error}=await sb.from('profiles').update({name:n}).eq('id',USER.id);if(error){toast('Грешка при запис');return;}PROFILE.name=n;toast('Запазено ✓');};
   $('acAddrs').onclick=()=>addressesModal(accountModal);
   $('acHow').onclick=()=>howModal(accountModal);
+  renderPushBox();
   $('sheet').querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.accent);$('sheet').querySelectorAll('[data-accent]').forEach(x=>x.classList.toggle('active',x===b));});
   $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeOpt);$('sheet').querySelectorAll('[data-theme-opt]').forEach(x=>x.classList.toggle('active',x===b));});
   $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
