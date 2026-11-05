@@ -214,6 +214,11 @@ window.__iqmInstall=null;window.addEventListener('beforeinstallprompt',function(
   /* как да използвам */
   .howstep{display:flex;gap:12px;margin:12px 0}
   .howstep .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800}
+  /* име в профила: малък бутон „Редактирай“ вътре в полето */
+  .namefield{position:relative}
+  .namefield input{padding-right:132px}
+  .namefield input[readonly]{background:var(--surface-2);cursor:default}
+  .namefield .hbtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:6px 10px;font-size:.8rem}
 </style>
 </head>
 <body>
@@ -317,7 +322,8 @@ let PRODUCTS=[], CATS=['Всички'], HIDDEN=[], CAT='Всички', SEARCH=''
 let CART=loadCart();       // {product_id: {product, qty}}
 let USER=null, PROFILE=null, ZONE={min_order:0,delivery_fee:0,free_over:0}, FAVS=new Set();
 let SETTINGS={vat:false,otp:false}, SORT='', LAST_COUNT=0;   // настройки от app_settings (като приложението)
-let OD_ID=null, DRV_CHAN=null, DRV_ID=null;                 // отворена поръчка + проследяване на доставчика
+let OD_ID=null, DRV_CHAN=null, DRV_ID=null;
+let MODAL_BACK=null, OVL=false, IGNORE_POP=false, EXIT_ARMED=false, exitT=null, ORD_BACK=null;   // бутонът „назад“ на телефона                 // отворена поръчка + проследяване на доставчика
 const VAT_PCT=20;
 const vatOf=g=>SETTINGS.vat? g-g/(1+VAT_PCT/100) : 0;        // включеното ДДС в крайна сума (0 при изключен режим)
 const GHOST='background:var(--surface);color:var(--ink);border:1px solid var(--line)';
@@ -485,7 +491,8 @@ function openDetail(id){
   loadRating(p);
   logView(p.id);
 }
-function openLightbox(url){$('lbImg').src=url;$('lightbox').classList.add('open');}
+function openLightbox(url){$('lbImg').src=url;$('lightbox').classList.add('open');ovlPush();}
+function closeLightbox(){$('lightbox').classList.remove('open');ovlDone();}
 async function loadRating(p){
   const el=$('detRating'); if(!el)return;
   let avg=Number(p.rating_override)||0, votes=Number(p.votes_override)||0, mine=0;
@@ -579,7 +586,7 @@ function renderCart(){
   $('checkoutBtn').disabled = items.length===0 || belowMin;
   $('checkoutBtn').textContent= belowMin? `Минимум ${money(mn)}` : (weighted? 'Поръчай (цена след претегляне)':'Поръчай');
 }
-function openCart(){renderCart();$('overlay').classList.add('open');$('drawer').classList.add('open');}
+function openCart(){renderCart();$('overlay').classList.add('open');$('drawer').classList.add('open');ovlPush();}
 
 // ---------- кошницата в профила (cart_items) — като приложението: една и съща кошница на телефона и в сайта ----------
 // При вход: продуктите от профила се добавят към тези в браузъра (по-новото количество в браузъра печели),
@@ -627,7 +634,7 @@ function scheduleSearchLog(){
 }
 function touchLastSeen(){if(USER&&document.visibilityState!=='hidden')sb.rpc('update_last_seen').then(()=>{},()=>{});}
 setInterval(touchLastSeen,60000);
-function closeCart(){$('overlay').classList.remove('open');$('drawer').classList.remove('open');}
+function closeCart(){$('overlay').classList.remove('open');$('drawer').classList.remove('open');ovlDone();}
 
 // ---------- auth ----------
 // „+359 888 123 456" / „00359…" → „0888123456" (като normalize_phone в базата)
@@ -647,11 +654,13 @@ async function refreshUser(){
   renderCats(); renderGrid(); renderDeliverBar();
   if(USER){ mergeServerCart(); touchLastSeen(); refreshPushToken(); } else { CART_UID=null; SYNCED={}; }
 }
-function openModal(html){
+function openModal(html,back){
   if(!/id="odBody"/.test(html)){ OD_ID=null; stopDriverWatch(); }   // излизаме от поръчката → спираме проследяването
   $('sheet').innerHTML=html;$('modal').classList.add('open');
+  MODAL_BACK=(typeof back==='function')?back:null;   // какво прави „назад“ на телефона (без него — затваря)
+  ovlPush();
 }
-function closeModal(){$('modal').classList.remove('open');}
+function closeModal(){$('modal').classList.remove('open');MODAL_BACK=null;ovlDone();}
 
 function authModal(tab='login'){
   openModal(`
@@ -782,7 +791,7 @@ function forgotModal(phone0){
     </form>
     <p style="text-align:center;font-size:.85rem;margin-top:8px"><a href="#" id="fpResend" hidden>Изпрати нов код</a></p>
     <p class="muted" style="text-align:center;font-size:.85rem">Не получаваш SMS? Обади се на <a href="tel:0896277066">0896 277 066</a></p>
-    <button class="big" id="fpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад към вход</button>`);
+    <button class="big" id="fpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад към вход</button>`, ()=>authModal('login'));
   let sent=false, phone='';
   const friendly=m=>/not registered|не е регистриран|Signups not allowed/.test(m)?'Няма акаунт с този телефон.'
     :/rate|seconds|too many/i.test(m)?'Твърде много опити. Изчакай минута и опитай пак.'
@@ -913,11 +922,11 @@ function accountModal(){
   if(!PROFILE){authModal('login');return;}
   const credits=PROFILE.free_delivery_credits||0;
   openModal(`
-    <button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div>
-    <h2>${escapeHtml(PROFILE.name||'Профил')}</h2>
+    <button class="x" style="float:right;margin:-6px -6px 0 0" onclick="closeModal()">×</button><div style="clear:both"></div>
+    <h2 id="acTitle">${escapeHtml(PROFILE.name||'Профил')}</h2>
     <p class="muted" style="margin:2px 0">${escapeHtml(PROFILE.phone||'')} · ${escapeHtml(PROFILE.zone||'')}</p>
-    <label>Име</label><input id="acName" value="${escapeHtml(PROFILE.name||'')}">
-    <button class="big" id="acSave" style="margin-top:8px">Запази името</button>
+    <label>Име</label>
+    <div class="namefield"><input id="acName" value="${escapeHtml(PROFILE.name||'')}" readonly aria-label="Име"><button type="button" class="hbtn" id="acEdit">✏️ Редактирай</button></div>
     <button class="big" id="acAddrs" style="${GHOST}">📍 Моите адреси</button>
     <label>Тема</label>
     <div class="paysel">
@@ -942,14 +951,26 @@ function accountModal(){
     <p style="text-align:center;font-size:.85rem;margin-top:14px"><a href="privacy.html" target="_blank" rel="noopener">Политика за поверителност</a> · <a href="terms.html" target="_blank" rel="noopener">Общи условия</a></p>
     <button class="hbtn" id="acDelete" style="display:block;margin:14px auto 0;background:transparent;border:none;color:var(--ink-faint);font-size:.85rem">Изтрий акаунта ми</button>
   `);
-  $('acSave').onclick=async()=>{const n=$('acName').value.trim();if(!n){toast('Въведи име');return;}const {error}=await sb.from('profiles').update({name:n}).eq('id',USER.id);if(error){toast('Грешка при запис');return;}PROFILE.name=n;toast('Запазено ✓');};
+  // „Редактирай“ → полето става редактируемо, бутонът става „Запази“; Enter също запазва
+  const nameEdit=async()=>{
+    const inp=$('acName'), b=$('acEdit');
+    if(inp.readOnly){inp.readOnly=false;inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);b.textContent='✓ Запази';b.classList.add('primary');return;}
+    const n=inp.value.trim(); if(!n){toast('Въведи име');return;}
+    const done=()=>{inp.readOnly=true;b.textContent='✏️ Редактирай';b.classList.remove('primary');};
+    if(n===PROFILE.name){done();return;}
+    b.disabled=true; const {error}=await sb.from('profiles').update({name:n}).eq('id',USER.id); b.disabled=false;
+    if(error){toast('Грешка при запис');return;}
+    PROFILE.name=n; inp.value=n; done(); const t=$('acTitle'); if(t)t.textContent=n; toast('Името е сменено ✓');
+  };
+  $('acEdit').onclick=nameEdit;
+  $('acName').onkeydown=e=>{if(e.key==='Enter'&&!$('acName').readOnly){e.preventDefault();nameEdit();}};
   $('acAddrs').onclick=()=>addressesModal(accountModal);
   $('acHow').onclick=()=>howModal(accountModal);
   renderPushBox();
   $('sheet').querySelectorAll('[data-accent]').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.accent);$('sheet').querySelectorAll('[data-accent]').forEach(x=>x.classList.toggle('active',x===b));});
   $('sheet').querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{applyTheme(b.dataset.themeOpt);$('sheet').querySelectorAll('[data-theme-opt]').forEach(x=>x.classList.toggle('active',x===b));});
   $('acCopy').onclick=()=>{try{navigator.clipboard.writeText(PROFILE.referral_code||'');toast('Кодът е копиран');}catch(e){}};
-  $('acOrders').onclick=ordersModal;
+  $('acOrders').onclick=()=>ordersModal(accountModal);
   $('acLogout').onclick=()=>{logout();closeModal();};
   $('acPass').onclick=()=>{
     openModal(`<h2>Смени паролата</h2>
@@ -958,7 +979,7 @@ function accountModal(){
       <label>Повтори новата</label><input id="cpNew2" type="password" autocomplete="new-password">
       <div class="err" id="cpErr"></div>
       <button class="big" id="cpGo">Запази</button>
-      <button class="big" id="cpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад</button>`);
+      <button class="big" id="cpBack" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Назад</button>`, accountModal);
     $('cpBack').onclick=accountModal;
     $('cpGo').onclick=async()=>{
       const o=$('cpOld').value,n=$('cpNew').value,n2=$('cpNew2').value,e=$('cpErr');e.textContent='';
@@ -992,7 +1013,7 @@ async function addressesModal(back){
     <h2>Моите адреси</h2>
     <div id="adList"><div class="center">Зареждане…</div></div>
     <button class="big" id="adAdd">＋ Нов адрес</button>
-    <button class="big" id="adBack" style="${GHOST}">Назад</button>`);
+    <button class="big" id="adBack" style="${GHOST}">Назад</button>`, back);
   $('adBack').onclick=back; $('adBackX').onclick=back;
   const {data,error}=await sb.from('client_addresses').select('id,label,address,is_default,created_at').eq('user_id',USER.id).order('is_default',{ascending:false}).order('created_at');
   const box=$('adList'); if(!box)return;
@@ -1031,7 +1052,7 @@ function addressEditor(a,makeDefault,back){
     ${zone?`<div class="muted" style="font-size:.85rem;margin-top:4px">Населено място: ${escapeHtml(zone)}</div>`:''}
     <div class="err" id="aeErr"></div>
     <button class="big" id="aeSave">Запази</button>
-    <button class="big" id="aeCancel" style="${GHOST}">Отказ</button>`);
+    <button class="big" id="aeCancel" style="${GHOST}">Отказ</button>`, ()=>addressesModal(back));
   $('sheet').querySelectorAll('[data-lbl]').forEach(b=>b.onclick=()=>{label=b.dataset.lbl;$('sheet').querySelectorAll('[data-lbl]').forEach(x=>x.classList.toggle('active',x===b));});
   $('aeCancel').onclick=()=>addressesModal(back);
   $('aeSave').onclick=async()=>{
@@ -1058,11 +1079,11 @@ function howModal(back){
     ['Новини и анкети','Камбанката 🔔 горе показва обяви, промоции и анкети. Гласувай и виж резултатите веднага.'],
     ['Сложи магазина на телефона','В Chrome натисни „Инсталирай“ в зелената лента или менюто ⋮ → „Инсталирай приложението“. На iPhone: „Сподели“ → „Добави към началния екран“.']
   ];
-  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div>
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="closeModal()">×</button><div style="clear:both"></div>
     <h2>Как да използвам магазина</h2>
     ${steps.map((s,i)=>`<div class="howstep"><div class="n">${i+1}</div><div><strong>${s[0]}</strong><div class="muted" style="font-size:.9rem;line-height:1.5;margin-top:2px">${s[1]}</div></div></div>`).join('')}
     <div class="info">Проблем с поръчката? Обади ни се: <a href="tel:${SUPPORT}">0896 277 066</a></div>
-    ${back?`<button class="big" id="howBack" style="${GHOST}">Назад</button>`:''}`);
+    ${back?`<button class="big" id="howBack" style="${GHOST}">Назад</button>`:''}`, back);
   if(back)$('howBack').onclick=back;
 }
 
@@ -1176,9 +1197,9 @@ async function orderSuccess(orderId){
       ${total!=null?`<p><strong>Общо: ${money(total)}</strong></p>`:''}
       <p class="muted">Складът вече я вижда. Ще доставим възможно най-скоро.</p>
       <button class="big" id="okOrders">Проследи поръчката</button>
-      <button class="big" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)" onclick="document.getElementById('modal').classList.remove('open')">Разбрах</button>
+      <button class="big" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)" onclick="closeModal()">Разбрах</button>
     </div>`);
-  $('okOrders').onclick=ordersModal;
+  $('okOrders').onclick=()=>ordersModal(null);
 }
 async function payWithCard(orderId){
   const err=$('coErr'); if(err)err.textContent='';
@@ -1203,6 +1224,7 @@ async function payWithCard(orderId){
     <button class="big" id="payCancel" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Отказ</button>
   `);
   pe.mount('#payEl');
+  MODAL_BACK=()=>{const c=$('payCancel');if(c)c.click();};   // „назад“ = Отказ (отменя неплатената поръчка)
   $('payCancel').onclick=async()=>{await sb.rpc('cancel_my_unpaid_order',{p_order_id:orderId}).catch(()=>{});closeModal();toast('Плащането е отказано');};
   $('payGo').onclick=async()=>{
     $('payGo').disabled=true; $('payGo').textContent='Обработка…'; $('payErr').textContent='';
@@ -1226,9 +1248,10 @@ function watchOrders(){
     if(OD_ID&&$('odBody'))fillOrderDetail(OD_ID);   // отворената поръчка се обновява сама (статус, доставчик)
   }).subscribe();
 }
-async function ordersModal(){
+async function ordersModal(back){
+  if(back!==undefined) ORD_BACK=(typeof back==='function')?back:null;   // откъде сме дошли (профил или никъде)
   if(!USER){authModal('login');return;}
-  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div><h2>Моите поръчки</h2><div id="ordList"><div class="center">Зареждане…</div></div>`);
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="closeModal()">×</button><div style="clear:both"></div><h2>Моите поръчки</h2><div id="ordList"><div class="center">Зареждане…</div></div>`, ORD_BACK);
   renderOrders();
 }
 async function renderOrders(){
@@ -1257,9 +1280,9 @@ async function watchDriver(o){
   }).subscribe();
 }
 async function orderDetail(id){
-  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" id="odBack">←</button><div style="clear:both"></div><div id="odBody"><div class="center">Зареждане…</div></div>`);
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" id="odBack">←</button><div style="clear:both"></div><div id="odBody"><div class="center">Зареждане…</div></div>`, ()=>ordersModal());
   OD_ID=id;
-  $('odBack').onclick=ordersModal;
+  $('odBack').onclick=()=>ordersModal();
   fillOrderDetail(id);
 }
 async function fillOrderDetail(id){
@@ -1294,7 +1317,7 @@ $('sort').onchange=e=>{SORT=e.target.value;renderGrid();};
 $('howLink').onclick=e=>{e.preventDefault();howModal();};
 $('cartBtn').onclick=openCart;
 $('newsBtn').onclick=newsModal;
-$('lightbox').onclick=()=>$('lightbox').classList.remove('open');
+$('lightbox').onclick=closeLightbox;
 $('closeCart').onclick=closeCart;
 $('overlay').onclick=closeCart;
 $('checkoutBtn').onclick=checkout;
@@ -1329,7 +1352,7 @@ async function loadNewsBadge(){
 function markNewsSeen(){try{localStorage.setItem('iqm_seen_news',JSON.stringify(NEWS_IDS));}catch(e){}const b=$('newsBadge');if(b)b.hidden=true;}
 async function newsModal(){
   markNewsSeen();
-  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="document.getElementById('modal').classList.remove('open')">×</button><div style="clear:both"></div><h2>Известия</h2><div id="newsBody"><div class="center">Зареждане…</div></div>`);
+  openModal(`<button class="x" style="float:right;margin:-6px -6px 0 0" onclick="closeModal()">×</button><div style="clear:both"></div><h2>Известия</h2><div id="newsBody"><div class="center">Зареждане…</div></div>`);
   const [{data:anns},{data:polls}]=await Promise.all([
     sb.from('announcements').select('title,body,created_at').eq('is_active',true).order('created_at',{ascending:false}),
     sb.from('polls').select('id,question,options').eq('is_active',true).order('created_at',{ascending:false})
@@ -1432,6 +1455,42 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.s
 (function(){const h=document.querySelector('header');if(!h)return;
   const set=()=>document.documentElement.style.setProperty('--hdr',h.offsetHeight+'px');
   set();if(window.ResizeObserver)new ResizeObserver(set).observe(h);else window.addEventListener('resize',set);})();
+
+// ---------- бутонът „назад“ на телефона (като в приложение) ----------
+// Отворен прозорец (профил, кошница, продукт, снимка) = един запис в историята. „Назад“ го затваря
+// или връща към предишния екран (адреси → профил, поръчка → списък). На основния екран: категория/търсене →
+// „Всички“; на „Всички“ първото „назад“ предупреждава, второто излиза от приложението.
+function anyOverlay(){return $('modal').classList.contains('open')||$('drawer').classList.contains('open')||$('lightbox').classList.contains('open');}
+function ensureGuard(){if(EXIT_ARMED){EXIT_ARMED=false;clearTimeout(exitT);try{history.pushState({iqm:'guard'},'');}catch(e){}}}
+function ovlPush(){if(OVL)return;ensureGuard();try{history.pushState({iqm:'ovl'},'');OVL=true;}catch(e){}}
+// затворено от бутон/×: махаме записа (след миг — ако веднага се отваря друг прозорец, записът остава за него)
+function ovlDone(){setTimeout(()=>{if(OVL&&!anyOverlay()){OVL=false;IGNORE_POP=true;history.back();}},0);}
+function backOverlay(){
+  const lb=$('lightbox').classList.contains('open'), md=$('modal').classList.contains('open'), dr=$('drawer').classList.contains('open');
+  if(lb){$('lightbox').classList.remove('open'); if(md||dr)ovlPush(); return;}
+  if(md){
+    const f=MODAL_BACK; MODAL_BACK=null;
+    if(f){f(); return;}                       // предишният екран (сам си прави нов запис)
+    $('modal').classList.remove('open'); if(dr)ovlPush(); return;
+  }
+  if(dr){$('overlay').classList.remove('open');$('drawer').classList.remove('open');}
+}
+window.addEventListener('popstate',()=>{
+  if(IGNORE_POP){IGNORE_POP=false;return;}
+  if(OVL){OVL=false;backOverlay();return;}
+  if(CAT!=='Всички'||SEARCH.trim()){         // от категория/търсене → към началото
+    CAT='Всички';SEARCH='';$('search').value='';renderCats();renderGrid();window.scrollTo({top:0});
+    try{history.pushState({iqm:'guard'},'');}catch(e){} return;
+  }
+  toast('Натисни „назад“ още веднъж за изход');
+  EXIT_ARMED=true; clearTimeout(exitT);
+  exitT=setTimeout(()=>{if(EXIT_ARMED){EXIT_ARMED=false;try{history.pushState({iqm:'guard'},'');}catch(e){}}},2500);
+});
+try{const st=history.state&&history.state.iqm;   // при презареждане историята се пази → не трупаме записи
+  if(!st){history.replaceState({iqm:'base'},'');history.pushState({iqm:'guard'},'');}
+  else if(st==='base')history.pushState({iqm:'guard'},'');
+  else if(st!=='guard')history.replaceState({iqm:'guard'},'');
+}catch(e){}
 
 // ---------- init ----------
 applyTheme(getTheme());
