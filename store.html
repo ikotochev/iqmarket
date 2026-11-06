@@ -757,7 +757,8 @@ function regForm(){return `
   <label>Населено място</label><select id="rZone"><option value="">Зареждане…</option></select>
   <label>Адрес за доставка</label><input id="rAddr" placeholder="кв., бл., вх., ет., ап.">
   <label>Парола (мин. 6)</label><input id="rPass" type="password" autocomplete="new-password">
-  <label>Код за покана (по избор)</label><input id="rRef" placeholder="">
+  <label>Код за покана (по избор)</label><input id="rRef" placeholder="напр. AB12CD34" autocapitalize="characters">
+  <div class="muted" style="font-size:.82rem;margin-top:4px">🎁 С код от приятел получаваш <strong>5% отстъпка</strong> на първата си поръчка.</div>
   <div class="err" id="authErr"></div>
   <button class="big" id="doReg">Създай акаунт</button>`;}
 async function loadZones(){
@@ -988,7 +989,7 @@ function renderPushBox(){
 }
 function accountModal(){
   if(!PROFILE){authModal('login');return;}
-  const credits=PROFILE.free_delivery_credits||0;
+  const credits=PROFILE.discount_credits||0;   // код за покана: отстъпки от 5% (fixes/31)
   openModal(`
     <button class="x" style="float:right;margin:-6px -6px 0 0" onclick="closeModal()">×</button><div style="clear:both"></div>
     <h2 id="acTitle">${escapeHtml(PROFILE.name||'Профил')}</h2>
@@ -1002,8 +1003,8 @@ function accountModal(){
     <div class="info" style="margin-top:16px">🎁 <strong>Покани приятел</strong><br>
       Твоят код: <strong style="font-size:1.1rem;letter-spacing:1px">${escapeHtml(PROFILE.referral_code||'')}</strong>
       <button class="hbtn" id="acCopy" style="margin-left:8px;padding:4px 10px">Копирай</button><br>
-      Когато приятел поръча за пръв път с кода ти, получаваш <strong>безплатна доставка</strong>.
-      ${credits>0?`<br>Имаш <strong>${credits}</strong> безплатни доставки 🎉`:''}
+      Дай кода на приятел. Той получава <strong>5% отстъпка</strong> на първата си поръчка, а ти — <strong>5%</strong> на следващата си, щом неговата бъде доставена.
+      ${credits>0?`<br>Имаш <strong>${credits}</strong> ${credits===1?'отстъпка':'отстъпки'} от 5% 🎉 ${credits===1?'Ползва се сама при следващата ти поръчка.':'Ползват се сами, по една на поръчка.'}`:''}
     </div>
     <button class="big" id="acOrders" style="background:var(--surface);color:var(--ink);border:1px solid var(--line)">📦 Моите поръчки</button>
     <button class="big" id="acLogout" style="background:transparent;color:var(--danger);border:1px solid var(--danger)">Изход</button>
@@ -1156,7 +1157,11 @@ async function checkout(){
   const minOrder=ZONE.min_order||0, fee=calcFee(sub);
   const belowMin = minOrder>0 && sub<minOrder;
   const weighted=cartArr().some(i=>i.product.is_weighted);
-  const finalTot = sub + fee;
+  // Отстъпка по код за покана — сървърът я решава (my_referral_discount = логиката на тригера); тук само я показваме
+  let RD={pct:0}; try{const {data}=await sb.rpc('my_referral_discount'); if(data&&+data.pct>0)RD=data;}catch(e){}
+  const discAmt = RD.pct>0 ? sub*RD.pct/100 : 0;
+  const discLbl = RD.reason==='referral_first'?'първа поръчка с код за покана':RD.reason==='referral_credit'?'за поканен приятел':'';
+  const finalTot = sub - discAmt + fee;   // доставката е без отстъпка (таксата се смята по сумата преди отстъпката)
   // Живо работно време на складовете от количката
   const whIds=[...new Set(cartArr().map(i=>i.product.warehouse_id))];
   let whRows=[]; try{const {data}=await sb.from('warehouses').select('id,name,working_hours').in('id',whIds); whRows=data||[];}catch(e){}
@@ -1198,6 +1203,7 @@ async function checkout(){
     ${belowMin?`<div class="err">Минимална поръчка за ${escapeHtml(PROFILE.zone||'')}: ${money(minOrder)} · сега имаш ${money(sub)}</div>`:''}
     ${weighted?`<div class="info">⚖️ Част от продуктите са на килограм — крайната цена се определя след претегляне и ще получиш известие с точната сума.</div>`:''}
     <div class="rowb" style="margin-top:12px"><span class="muted">Продукти</span><span>${money(sub)}</span></div>
+    ${discAmt>0?`<div class="rowb"><span class="muted">🎁 Отстъпка ${+RD.pct}%${discLbl?`<br><span style="font-size:.8rem">${discLbl}</span>`:''}</span><span style="color:var(--brand);font-weight:700;white-space:nowrap">−${money(discAmt)}</span></div>`:''}
     <div class="rowb"><span class="muted">Доставка</span><span>${fee<=0?'<span style="color:var(--brand);font-weight:700">Безплатна</span>':money(fee)}</span></div>
     <div class="rowb" style="font-weight:800;font-size:1.05rem"><span>${weighted?'Общо (прогнозно)':'Общо'}</span><span>${money(finalTot)}</span></div>
     ${SETTINGS.vat?`<div class="rowb muted" style="font-size:.85rem"><span>в т.ч. ДДС ${VAT_PCT}%</span><span>${money(vatOf(finalTot))}</span></div>`:''}
@@ -1382,7 +1388,10 @@ async function fillOrderDetail(id){
     <div style="margin:14px 0 6px;font-weight:700">Артикули</div>
     ${its||'<div class="muted">—</div>'}
     ${missing?'<div class="muted" style="font-size:.8rem;margin-top:6px">Продуктите, които складът няма, не се доставят и не се таксуват.</div>':''}
-    <div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
+    ${(+o.discount_percent>0)?(()=>{const raw=(items||[]).reduce((s,i)=>s+(i.unavailable?0:(i.price||0)*(i.actual_qty??i.qty)),0);
+        return `<div class="rowb" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><span class="muted">🎁 Отстъпка ${+o.discount_percent}%${o.discount_reason==='referral_first'?'<br><span style="font-size:.8rem">първа поръчка с код за покана</span>':o.discount_reason==='referral_credit'?'<br><span style="font-size:.8rem">за поканен приятел</span>':''}</span><span style="color:var(--brand);font-weight:700;white-space:nowrap">−${money(raw*o.discount_percent/100)}</span></div>`;})():''}
+    <div class="rowb"${(+o.discount_percent>0)?'':' style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"'}><span class="muted">Доставка</span><span>${(+o.delivery_fee>0)?money(o.delivery_fee):'<span style="color:var(--brand);font-weight:700">Безплатна</span>'}</span></div>
+    <div class="rowb" style="font-weight:800"><span>${pend?'Общо (прогнозно)':'Общо'}</span><span>${money(o.total)}</span></div>
     ${(+o.vat_amount>0)?`<div class="rowb muted" style="font-size:.85rem"><span>в т.ч. ДДС ${VAT_PCT}%</span><span>${money(o.vat_amount)}</span></div>`:''}
     ${pend?'<div class="muted" style="font-size:.8rem;margin-top:6px">⚖️ Част от продуктите се претеглят — крайната цена може леко да варира.</div>':''}
     <div class="info" style="margin-top:14px">При проблем: <a href="tel:${SUPPORT}">${SUPPORT}</a></div>
